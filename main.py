@@ -1,40 +1,47 @@
 from fastapi import FastAPI, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 from models import database, schemas
 from ai.agent import get_financial_agent
 from seed.seed_db import seed_database
+import contextlib
 
-app = FastAPI(title="Chronofi Backend API", description="Chronofi Financial Planning Engine")
+@contextlib.asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Run once on startup
+    async with database.AsyncSessionLocal() as db:
+        # Auto-seed if empty
+        result = await db.execute(select(database.User))
+        first_user = result.scalars().first()
+        if not first_user:
+            await seed_database()
+    yield
 
-def get_db():
-    db = database.SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+app = FastAPI(title="Chronofi Backend API", description="Enterprise Financial Planning Engine", lifespan=lifespan)
 
-@app.on_event("startup")
-def startup_event():
-    database.init_db()
-    db = database.SessionLocal()
-    if db.query(database.User).count() == 0:
-        seed_database()
-    db.close()
+async def get_db():
+    async with database.AsyncSessionLocal() as db:
+        try:
+            yield db
+        finally:
+            await db.close()
 
 @app.get("/api/profile/{user_id}", response_model=schemas.UserProfileResponse)
-def get_profile(user_id: int, db: Session = Depends(get_db)):
-    user = db.query(database.User).filter(database.User.id == user_id).first()
+async def get_profile(user_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(database.User).filter(database.User.id == user_id))
+    user = result.scalars().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
 @app.post("/api/chat", response_model=schemas.ChatResponse)
-def chat_with_chronofi(request: schemas.ChatRequest, db: Session = Depends(get_db)):
-    user = db.query(database.User).filter(database.User.id == request.user_id).first()
+async def chat_with_chronofi(request: schemas.ChatRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(database.User).filter(database.User.id == request.user_id))
+    user = result.scalars().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
         
-    # Build financial context for the AI prompt
+    # Build financial context
     context = f"User Profile: {user.name}, Age: {user.age}, Salary: ₹{user.base_salary}. "
     assets_val = sum(a.current_value for a in user.assets)
     context += f"Total Assets: ₹{assets_val}. "
@@ -46,10 +53,11 @@ def chat_with_chronofi(request: schemas.ChatRequest, db: Session = Depends(get_d
     agent = get_financial_agent()
     
     try:
-        # LangGraph invoke structure requires a messages list
-        result = agent.invoke({"messages": [("user", full_prompt)]})
-        # The AI's final response is the last message content
-        response_text = result["messages"][-1].content
+        # We run the synchronous LLM call in a thread to prevent event loop blocking
+        import asyncio
+        loop = asyncio.get_running_loop()
+        agent_result = await loop.run_in_executor(None, lambda: agent.invoke({"messages": [("user", full_prompt)]}))
+        response_text = agent_result["messages"][-1].content
     except Exception as e:
         response_text = f"I'm sorry, I encountered an error analyzing that scenario. ({str(e)})"
     
@@ -59,7 +67,7 @@ def chat_with_chronofi(request: schemas.ChatRequest, db: Session = Depends(get_d
     )
 
 @app.post("/admin/reset")
-def reset_database():
+async def reset_database():
     """Hackathon God-Mode endpoint: Resets DB and seeds personas instantly."""
-    seed_database()
+    await seed_database()
     return {"message": "Database reset and seeded with Arjun and Priya personas."}
