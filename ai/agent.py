@@ -1,7 +1,7 @@
 from langchain.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.prebuilt import create_react_agent
-from engine.monte_carlo import run_monte_carlo_sip
+from engine.advanced_monte_carlo import run_advanced_monte_carlo
 from engine.math_engine import run_scenario
 import os
 import asyncio
@@ -9,16 +9,18 @@ import asyncio
 @tool
 def simulate_goal_probability_tool(target_amount: float, current_savings: float, monthly_sip: float, years: int) -> str:
     """
-    Runs a Monte Carlo simulation (10,000 market paths) to determine the exact probability of a user hitting their financial goal given a specific monthly savings amount.
-    Use this tool to test if a user's proposed savings plan is realistic.
+    Runs a highly advanced quantitative simulation (10,000 paths) including Jump-Diffusion (crashes), dynamic glide-path derisking, and stochastic inflation.
+    Use this to determine the exact probability of hitting a financial goal.
     """
-    result = run_monte_carlo_sip(target_amount, current_savings, monthly_sip, years)
+    result = run_advanced_monte_carlo(target_amount, current_savings, monthly_sip, years)
     
     return (
-        f"Probability of hitting target (₹{target_amount}): {result['probability_of_success_percent']}%\n"
-        f"Worst Case (10th Percentile Market): ₹{result['worst_case_10th_percentile']}\n"
-        f"Expected Case (50th Percentile Market): ₹{result['expected_50th_percentile']}\n"
-        f"Best Case (90th Percentile Market): ₹{result['best_case_90th_percentile']}"
+        f"Probability of hitting target: {result['probability_of_success_percent']}%\n"
+        f"Inflated Target Amount (Median): ₹{result['median_inflated_target']}\n"
+        f"Expected Portfolio Value (50th Percentile): ₹{result['expected_50th_percentile']}\n"
+        f"Worst Case Scenario (10th Percentile): ₹{result['worst_case_10th_percentile']}\n"
+        f"CVaR (Average of worst 10% market crashes): ₹{result['conditional_value_at_risk_cvar']}\n"
+        f"Best Case Scenario (90th Percentile): ₹{result['best_case_90th_percentile']}"
     )
 
 @tool
@@ -29,15 +31,16 @@ def run_scenario_tool(base_salary: float, monthly_expenses: float, months_unempl
 
 tools = [simulate_goal_probability_tool, run_scenario_tool]
 
-system_message = """You are Chronofi, a highly professional financial AI co-pilot.
-Your job is to help users understand the true probability of achieving their financial goals using Monte Carlo simulations.
+system_message = """You are Chronofi, a highly professional financial AI co-pilot and quantitative analyst.
+Your job is to help users understand the true probability of achieving their financial goals using our institutional-grade Monte Carlo engine.
 
 CRITICAL RULES:
 1. You MUST NOT perform math yourself. Always use `simulate_goal_probability_tool` to test if their SIP is enough.
-2. When explaining results, clearly translate the percentiles: 
-   - Explain the "Expected Case" as average market conditions.
-   - Explain the "Worst Case" as what happens if the market underperforms.
-3. If probability of success is below 80%, gently suggest they either increase their SIP, delay the target date, or lower the target amount.
+2. When explaining results, clearly translate the quantitative metrics:
+   - Explain the "Inflated Target" as what the goal will actually cost in the future due to cost-of-living increases.
+   - Explain the "Expected Case" as average market conditions (50th percentile).
+   - Explain "CVaR" (Conditional Value at Risk) as the severe "Black Swan" crash scenario—what happens in the absolute worst 10% of market crashes.
+3. If probability of success is below 80%, gently suggest they either increase their SIP, delay the target date, or lower the target amount. Do not offer specific asset advice (e.g., "buy this stock"), speak only of broad asset classes.
 """
 
 def get_financial_agent():
