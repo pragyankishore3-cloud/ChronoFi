@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from models import database, schemas
-from api import auth_routes, deps
+from api import auth_routes, deps, tax_routes
 from ai.agent import get_financial_agent
 from seed.seed_db import seed_database
 
@@ -23,8 +23,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Chronofi Backend API", description="Enterprise Financial Planning Engine", lifespan=lifespan)
 
-# Mount Auth Routes
+# Mount Routes
 app.include_router(auth_routes.router, prefix="/api/auth", tags=["auth"])
+app.include_router(tax_routes.router, prefix="/api/tax", tags=["tax"])
 
 @app.get("/api/profile/me", response_model=schemas.UserProfileResponse)
 async def get_profile(current_user: database.User = Depends(deps.get_current_user)):
