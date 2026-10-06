@@ -1,5 +1,5 @@
 # Updated Budget Constants
-STANDARD_DEDUCTION_NEW = 75000.0 # Budget 2024 update
+STANDARD_DEDUCTION_NEW = 75000.0
 STANDARD_DEDUCTION_OLD = 50000.0
 HEALTH_CESS_RATE = 0.04
 
@@ -14,25 +14,31 @@ def _calc_slabs_new(income: float) -> float:
     return tax
 
 def calculate_new_regime_tax(salary: float, agri_income: float = 0.0) -> dict:
-    """Calculates New Regime tax and isolates the agricultural rebate."""
+    """Calculates New Regime tax with proper 87A cap and Basic Exemption checks."""
     taxable_income = max(0.0, salary - STANDARD_DEDUCTION_NEW)
+    BASIC_EXEMPTION = 300000.0
     agri_rebate = 0.0
     
-    # 87A Rebate: No tax if taxable income is up to 7 Lakhs
-    if taxable_income <= 700000:
-        return {"tax": 0.0, "agri_rebate": 0.0}
-        
-    # PARTIAL INTEGRATION RULE for Agricultural Income
-    if agri_income > 5000:
+    # 1. Calculate Base Tax (with or without Agricultural Integration)
+    # Integration only triggers if Agri Income > 5000 AND Non-Agri Income > Basic Exemption Limit
+    if agri_income > 5000 and taxable_income > BASIC_EXEMPTION:
         tax_total = _calc_slabs_new(taxable_income + agri_income)
-        # Basic Exemption Limit in New Regime is 3L
-        agri_rebate = _calc_slabs_new(300000 + agri_income)
-        tax = tax_total - agri_rebate
+        agri_rebate = _calc_slabs_new(BASIC_EXEMPTION + agri_income)
+        tax_before_87a = tax_total - agri_rebate
     else:
-        tax = _calc_slabs_new(taxable_income)
+        tax_before_87a = _calc_slabs_new(taxable_income)
+        
+    # 2. Apply Section 87A Rebate AFTER integration, respecting the maximum cap
+    # 87A eligibility is strictly based on Non-Agri Taxable Income being <= 7 Lakhs
+    if taxable_income <= 700000:
+        # The rebate is capped at ₹25,000 for the New Regime
+        rebate_87a = min(tax_before_87a, 25000.0)
+        tax_before_cess = max(0.0, tax_before_87a - rebate_87a)
+    else:
+        tax_before_cess = tax_before_87a
         
     return {
-        "tax": tax * (1 + HEALTH_CESS_RATE), 
+        "tax": tax_before_cess * (1 + HEALTH_CESS_RATE), 
         "agri_rebate": agri_rebate
     }
 
@@ -45,23 +51,28 @@ def _calc_slabs_old(income: float) -> float:
     return tax
 
 def calculate_old_regime_tax(salary: float, deductions: float, agri_income: float = 0.0) -> dict:
-    """Calculates Old Regime tax and isolates the agricultural rebate."""
+    """Calculates Old Regime tax with proper 87A cap and Basic Exemption checks."""
     taxable_income = max(0.0, salary - STANDARD_DEDUCTION_OLD - deductions)
+    BASIC_EXEMPTION = 250000.0
     agri_rebate = 0.0
     
-    # 87A Rebate: No tax if taxable income is up to 5 Lakhs
-    if taxable_income <= 500000:
-        return {"tax": 0.0, "agri_rebate": 0.0}
-        
-    if agri_income > 5000:
+    # Integration only triggers if Agri Income > 5000 AND Non-Agri Income > Basic Exemption Limit
+    if agri_income > 5000 and taxable_income > BASIC_EXEMPTION:
         tax_total = _calc_slabs_old(taxable_income + agri_income)
-        # Basic Exemption Limit in Old Regime is 2.5L
-        agri_rebate = _calc_slabs_old(250000 + agri_income)
-        tax = tax_total - agri_rebate
+        agri_rebate = _calc_slabs_old(BASIC_EXEMPTION + agri_income)
+        tax_before_87a = tax_total - agri_rebate
     else:
-        tax = _calc_slabs_old(taxable_income)
+        tax_before_87a = _calc_slabs_old(taxable_income)
+        
+    # Section 87A eligibility for Old Regime is <= 5 Lakhs
+    if taxable_income <= 500000:
+        # The rebate is capped at ₹12,500 for the Old Regime
+        rebate_87a = min(tax_before_87a, 12500.0)
+        tax_before_cess = max(0.0, tax_before_87a - rebate_87a)
+    else:
+        tax_before_cess = tax_before_87a
         
     return {
-        "tax": tax * (1 + HEALTH_CESS_RATE), 
+        "tax": tax_before_cess * (1 + HEALTH_CESS_RATE), 
         "agri_rebate": agri_rebate
     }
