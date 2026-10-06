@@ -1,7 +1,7 @@
 from langchain.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.prebuilt import create_react_agent
-from engine.advanced_monte_carlo import run_advanced_monte_carlo
+from engine.ml_forecaster import run_ml_forecaster
 from engine.math_engine import run_scenario
 import os
 import asyncio
@@ -9,13 +9,20 @@ import asyncio
 @tool
 def simulate_goal_probability_tool(target_amount: float, current_savings: float, monthly_sip: float, years: int) -> str:
     """
-    Runs a highly advanced quantitative simulation (10,000 paths) including Jump-Diffusion (crashes), dynamic glide-path derisking, and stochastic inflation.
+    Runs a probabilistic machine learning forecast using a PyTorch LSTM trained on historical S&P 500 data.
+    Uses Monte Carlo Dropout to generate 500 potential market trajectories.
     Use this to determine the exact probability of hitting a financial goal.
     """
-    result = run_advanced_monte_carlo(target_amount, current_savings, monthly_sip, years)
+    result = run_ml_forecaster(
+        target_amount, 
+        current_savings, 
+        monthly_sip, 
+        years, 
+        num_simulations=500
+    )
     
     return (
-        f"Probability of hitting target: {result['probability_of_success_percent']}%\n"
+        f"LSTM ML Forecast Probability of hitting target: {result['probability_of_success_percent']}%\n"
         f"Inflated Target Amount (Median): ₹{result['median_inflated_target']}\n"
         f"Expected Portfolio Value (50th Percentile): ₹{result['expected_50th_percentile']}\n"
         f"Worst Case Scenario (10th Percentile): ₹{result['worst_case_10th_percentile']}\n"
