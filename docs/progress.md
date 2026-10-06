@@ -11,6 +11,8 @@
 ## Current Status
 The application is **feature-complete for MVP**. The backend correctly processes probabilistic ML queries, and the frontend accurately renders the trajectory graphs and chat interface.
 
+*Update (Phase 6):* Reviewed collaborator branches (PrasoonMishra0307 patches 1, 2, 3). Integrated patches 1 and 2 (Strict Pydantic token models, security timing mitigations, and JWT subject immutability) into `integration/collaborator-review`. Rejected patch 3 due to Python syntax errors. Branch pushed for PR.
+
 ## Known Bugs
 - None currently active. The `EPERM` Next.js file locking bug and the Pydantic schema mismatches were resolved.
 
