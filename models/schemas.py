@@ -43,6 +43,7 @@ class GoalResponse(GoalBase):
 
 class UserBase(BaseModel):
     name: str
+    email: str
     age: int
     risk_tolerance: str
     base_salary: float

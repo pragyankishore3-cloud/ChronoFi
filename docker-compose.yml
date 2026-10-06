@@ -1,17 +1,33 @@
 version: '3.8'
 
 services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/chronofi
+      - SECRET_KEY=your_production_secret_key
+    depends_on:
+      - db
+      - redis
+    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"
+
   db:
     image: postgres:15-alpine
-    container_name: chronofi_postgres
     environment:
-      POSTGRES_USER: chronofi_user
-      POSTGRES_PASSWORD: chronofi_password
-      POSTGRES_DB: chronofi_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=chronofi
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
 
 volumes:
-  postgres_data:
+  pgdata:
