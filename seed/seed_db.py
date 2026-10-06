@@ -2,6 +2,8 @@ import asyncio
 from models.database import AsyncSessionLocal, User, Asset, Liability, Goal
 from sqlalchemy.future import select
 
+from core.security import get_password_hash
+
 async def seed_database():
     async with AsyncSessionLocal() as db:
         # Clear existing data
@@ -11,8 +13,17 @@ async def seed_database():
         await db.execute(User.__table__.delete())
         await db.commit()
 
+        dummy_password = get_password_hash("password123")
+
         # Persona 1: Arjun
-        arjun = User(name="Arjun", age=25, risk_tolerance="Aggressive", base_salary=80000.0)
+        arjun = User(
+            name="Arjun", 
+            email="arjun@chronofi.demo", 
+            hashed_password=dummy_password, 
+            age=25, 
+            risk_tolerance="Aggressive", 
+            base_salary=80000.0
+        )
         db.add(arjun)
         await db.commit()
         await db.refresh(arjun)
@@ -22,7 +33,14 @@ async def seed_database():
         db.add(Goal(user_id=arjun.id, name="Buy a Car", target_amount=1000000.0, target_years=3, priority="Important"))
 
         # Persona 2: Priya
-        priya = User(name="Priya", age=35, risk_tolerance="Moderate", base_salary=250000.0)
+        priya = User(
+            name="Priya", 
+            email="priya@chronofi.demo", 
+            hashed_password=dummy_password,
+            age=35, 
+            risk_tolerance="Moderate", 
+            base_salary=250000.0
+        )
         db.add(priya)
         await db.commit()
         await db.refresh(priya)
