@@ -3,7 +3,11 @@ import logging
 import fitz  # PyMuPDF
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+
+
 
 from models.database import Document, DocumentChunk, DocumentStatus
 
