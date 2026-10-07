@@ -3,6 +3,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.prebuilt import create_react_agent
 from engine.ml_forecaster import run_ml_forecaster
 from engine.math_engine import run_scenario
+from ai.tools import calculate_tax_liability
 import os
 import asyncio
 
@@ -36,7 +37,7 @@ def run_scenario_tool(base_salary: float, monthly_expenses: float, months_unempl
     result = run_scenario(base_salary, monthly_expenses, months_unemployed)
     return f"Annual Surplus/Deficit: ₹{result['annual_surplus']}. Is Deficit: {result['is_deficit']}"
 
-tools = [simulate_goal_probability_tool, run_scenario_tool]
+tools = [simulate_goal_probability_tool, run_scenario_tool, calculate_tax_liability]
 
 system_message = """You are Chronofi, a highly professional financial AI co-pilot and quantitative analyst.
 Your job is to help users understand the true probability of achieving their financial goals using our institutional-grade Monte Carlo engine.
