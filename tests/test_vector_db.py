@@ -1,10 +1,9 @@
 import pytest
 import os
-import numpy as np
 from unittest.mock import patch, MagicMock
 
 from models.database import DocumentChunk
-from engine.vector_store import embed_chunks, secure_vector_search
+from engine.vector_store import embed_chunks, retrieve_documents
 
 @pytest.mark.asyncio
 async def test_embed_chunks(db_session):
@@ -44,7 +43,7 @@ async def test_secure_vector_search_cross_user_isolation(db_session):
     
     # Simulate User B searching
     with patch("engine.vector_store.embeddings_model.aembed_query", return_value=mock_query_embedding):
-        results = await secure_vector_search(query, user_id=99, db=db_session, top_k=5)
+        results = await retrieve_documents(query, user_id=99, db=db_session, top_k=5)
         
     # Security Rule: Only User B's chunk should be returned, NEVER User A's
     assert len(results) == 1
@@ -72,6 +71,6 @@ async def test_deleted_document_retrieval(db_session):
     
     # Search should return 0 chunks because cascade delete removed them
     with patch("engine.vector_store.embeddings_model.aembed_query", return_value=[1.0, 0.0]):
-        results = await secure_vector_search("Secret", user_id=1, db=db_session)
+        results = await retrieve_documents("Secret", user_id=1, db=db_session)
         
     assert len(results) == 0
