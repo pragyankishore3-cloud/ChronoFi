@@ -16,7 +16,7 @@ async def test_embed_chunks(db_session):
     # We mock the embeddings model so it doesn't hit the API during test
     mock_embeddings = [[0.1] * 768, [0.2] * 768]
     
-    with patch("engine.vector_store.embeddings_model.aembed_documents", return_value=mock_embeddings):
+    with patch("engine.vector_store.embeddings_model.embed_documents", return_value=mock_embeddings):
         await embed_chunks(chunks, db_session)
         
     # Check that embeddings were saved
@@ -42,7 +42,7 @@ async def test_secure_vector_search_cross_user_isolation(db_session):
     mock_query_embedding = [0.9, 0.15, 0.1] # Similar to both
     
     # Simulate User B searching
-    with patch("engine.vector_store.embeddings_model.aembed_query", return_value=mock_query_embedding):
+    with patch("engine.vector_store.embeddings_model.embed_query", return_value=mock_query_embedding):
         results = await retrieve_documents(query, user_id=99, db=db_session, top_k=5)
         
     # Security Rule: Only User B's chunk should be returned, NEVER User A's
@@ -70,7 +70,7 @@ async def test_deleted_document_retrieval(db_session):
     await db_session.commit()
     
     # Search should return 0 chunks because cascade delete removed them
-    with patch("engine.vector_store.embeddings_model.aembed_query", return_value=[1.0, 0.0]):
+    with patch("engine.vector_store.embeddings_model.embed_query", return_value=[1.0, 0.0]):
         results = await retrieve_documents("Secret", user_id=1, db=db_session)
         
     assert len(results) == 0
