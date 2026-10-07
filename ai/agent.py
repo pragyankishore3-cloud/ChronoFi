@@ -53,5 +53,5 @@ CRITICAL RULES:
 
 def get_financial_agent():
     llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0.2)
-    agent = create_react_agent(llm, tools, state_modifier=system_message)
+    agent = create_react_agent(llm, tools, prompt=system_message)
     return agent

@@ -8,7 +8,7 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langchain_core.tools import tool
 from langgraph.prebuilt import create_react_agent
-import yfinance as yf
+
 from sqlalchemy.future import select
 from models.database import AsyncSessionLocal, User, Asset, Liability, Goal
 from engine.tax_calc import calculate_new_regime_tax, calculate_old_regime_tax
@@ -38,26 +38,21 @@ def calculate_tax_impact(salary: float, deductions: float = 0.0, agri_income: fl
     except Exception as e:
         return {"error": str(e)}
 
-# --- INVESTMENT TOOLS ---
+from engine.ml_forecaster import run_ml_forecaster
+from engine.math_engine import run_scenario
+
+# --- QUANT TOOLS ---
 @tool
-def get_stock_data(ticker: str) -> dict:
-    """Fetches real-time stock prices and 3-year performance trends for a given ticker. Distinguishes real-time vs historical."""
-    try:
-        stock = yf.Ticker(ticker)
-        hist = stock.history(period="3y")
-        if hist.empty:
-            return {"error": f"No data found for {ticker}", "status": "unavailable"}
-        current_price = float(hist['Close'].iloc[-1])
-        start_price = float(hist['Close'].iloc[0])
-        performance = ((current_price - start_price) / start_price) * 100
-        return {
-            "symbol": ticker,
-            "current_price": current_price,
-            "performance_3y_percent": performance,
-            "status": "real-time"
-        }
-    except Exception as e:
-        return {"error": str(e), "status": "unavailable"}
+def simulate_goal_probability_tool(target_amount: float, current_savings: float, monthly_sip: float, years: int) -> str:
+    """Runs a probabilistic machine learning forecast using PyTorch LSTM."""
+    result = run_ml_forecaster(target_amount, current_savings, monthly_sip, years, num_simulations=500)
+    return f"Probability of hitting target: {result['probability_of_success_percent']}%"
+
+@tool
+def run_scenario_tool(base_salary: float, monthly_expenses: float, months_unemployed: int) -> str:
+    """Calculates financial impact of life events."""
+    result = run_scenario(base_salary, monthly_expenses, months_unemployed)
+    return f"Annual Surplus/Deficit: {result['annual_surplus']}"
 
 # --- BUDGETING TOOLS ---
 @tool
@@ -103,19 +98,19 @@ llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0.1)
 tax_agent = create_react_agent(
     llm, 
     tools=[calculate_tax_impact], 
-    state_modifier="You are a Tax Agent. Calculate tax implications using tools. Do not invent tax rates or assumptions."
+    prompt="You are a Tax Agent. Calculate tax implications using tools. Do not invent tax rates or assumptions."
 )
 
-investment_agent = create_react_agent(
+quant_agent = create_react_agent(
     llm, 
-    tools=[get_stock_data], 
-    state_modifier="You are an Investment Analyst. Fetch market data using tools. Distinguish real-time data from calculated metrics. Never fabricate missing market information."
+    tools=[simulate_goal_probability_tool, run_scenario_tool], 
+    prompt="You are an Quant Analyst. Run deep learning Monte Carlo simulations for the user goals."
 )
 
 budgeting_agent = create_react_agent(
     llm, 
     tools=[get_user_income, get_user_assets, get_user_liabilities], 
-    state_modifier="You are a Budgeting Agent. Query the user's financial profile. You ONLY have access to the user's own data (enforced by tools). Never generate arbitrary SQL."
+    prompt="You are a Budgeting Agent. Query the user's financial profile. You ONLY have access to the user's own data (enforced by tools). Never generate arbitrary SQL."
 )
 
 # Nodes
@@ -135,8 +130,8 @@ async def tax_node(state: AgentState, config: RunnableConfig):
     res = await tax_agent.ainvoke({"messages": msgs}, config)
     return {"messages": [res["messages"][-1]]}
 
-async def investment_node(state: AgentState, config: RunnableConfig):
-    res = await investment_agent.ainvoke({"messages": state["messages"]}, config)
+async def quant_node(state: AgentState, config: RunnableConfig):
+    res = await quant_agent.ainvoke({"messages": state["messages"]}, config)
     return {"messages": [res["messages"][-1]]}
 
 async def budgeting_node(state: AgentState, config: RunnableConfig):
@@ -145,15 +140,15 @@ async def budgeting_node(state: AgentState, config: RunnableConfig):
 
 # Router
 class Router(TypedDict):
-    agents: List[Literal["Tax_Agent", "Investment_Analyst", "Budgeting_Agent", "FINISH"]]
+    agents: List[Literal["Tax_Agent", "Quant_Agent", "Budgeting_Agent", "FINISH"]]
     reason: str
 
-supervisor_prompt = """You are a Supervisor orchestrating financial agents: Tax_Agent, Investment_Analyst, Budgeting_Agent.
+supervisor_prompt = """You are a Supervisor orchestrating financial agents: Tax_Agent, Quant_Agent, Budgeting_Agent.
 User Query: {query}
 
 Decide which agent(s) need to act. 
 - If the user asks about taxes, route to Tax_Agent.
-- If they ask about stocks or market, route to Investment_Analyst.
+- If they ask about stocks or market, route to Quant_Agent.
 - If they ask about their income, spending, assets, or liabilities, route to Budgeting_Agent.
 - If you need data from multiple domains, route to ONE agent at a time.
 - Once you have enough information to answer the user fully, route to FINISH.
@@ -178,11 +173,11 @@ async def supervisor_node(state: AgentState, config: RunnableConfig):
 # Graph
 workflow = StateGraph(AgentState)
 workflow.add_node("Tax_Agent", tax_node)
-workflow.add_node("Investment_Analyst", investment_node)
+workflow.add_node("Quant_Agent", quant_node)
 workflow.add_node("Budgeting_Agent", budgeting_node)
 workflow.add_node("supervisor", supervisor_node)
 
-for member in ["Tax_Agent", "Investment_Analyst", "Budgeting_Agent"]:
+for member in ["Tax_Agent", "Quant_Agent", "Budgeting_Agent"]:
     workflow.add_edge(member, "supervisor")
 
 workflow.add_edge(START, "supervisor")
@@ -191,7 +186,7 @@ workflow.add_conditional_edges(
     lambda state: state["next"],
     {
         "Tax_Agent": "Tax_Agent",
-        "Investment_Analyst": "Investment_Analyst",
+        "Quant_Agent": "Quant_Agent",
         "Budgeting_Agent": "Budgeting_Agent",
         "FINISH": END
     }
