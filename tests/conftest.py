@@ -1,3 +1,5 @@
+import os
+os.environ['GEMINI_API_KEY'] = os.environ.get('GEMINI_API_KEY', 'dummy_key')
 import pytest
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
