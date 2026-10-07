@@ -71,3 +71,55 @@ class Goal(Base):
     inflation_rate = Column(Float, default=0.06)
     
     user = relationship("User", back_populates="goals")
+import json
+from sqlalchemy import JSON
+
+class DocumentType(str, enum.Enum):
+    TAX_RETURN = "Tax Return"
+    LOAN_STATEMENT = "Loan Statement"
+    INSURANCE = "Insurance"
+    OTHER = "Other"
+    UNKNOWN = "Unknown"
+
+class DocumentStatus(str, enum.Enum):
+    PROCESSING = "Processing"
+    COMPLETED = "Completed"
+    READY = "Ready"
+    FAILED = "Failed"
+
+class Document(Base):
+    __tablename__ = "documents"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    filename = Column(String)
+    file_path = Column(String)
+    mime_type = Column(String)
+    size_bytes = Column(Integer)
+    document_type = Column(String)
+    financial_year = Column(String)
+    issuer = Column(String)
+    status = Column(Enum(DocumentStatus))
+    
+    chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan", lazy="selectin")
+
+class DocumentChunk(Base):
+    __tablename__ = "document_chunks"
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id"))
+    user_id = Column(Integer, ForeignKey("users.id"))
+    content = Column(String)
+    page_number = Column(Integer)
+    chunk_index = Column(Integer)
+    embedding = Column(JSON)
+    
+    document = relationship("Document", back_populates="chunks")
+
+class KnowledgeBaseChunk(Base):
+    __tablename__ = "knowledge_base"
+    id = Column(Integer, primary_key=True, index=True)
+    content = Column(String)
+    topic = Column(String)
+    embedding = Column(JSON)
+
+
+

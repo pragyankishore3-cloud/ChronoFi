@@ -1,4 +1,7 @@
 import os
+from dotenv import load_dotenv
+load_dotenv()
+import os
 import json
 from typing import Annotated, Literal, TypedDict, List, Dict, Any
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
@@ -11,6 +14,7 @@ from langgraph.prebuilt import create_react_agent
 
 from sqlalchemy.future import select
 from models.database import AsyncSessionLocal, User, Asset, Liability, Goal
+from engine.vector_store import retrieve_documents
 from engine.tax_calc import calculate_new_regime_tax, calculate_old_regime_tax
 
 class AgentState(TypedDict):
@@ -91,6 +95,18 @@ async def get_user_liabilities(config: RunnableConfig) -> list:
         return [{"name": l.name, "principal_remaining": l.principal_remaining, "monthly_payment": l.monthly_payment} for l in liabilities]
 
 
+
+# --- RAG TOOLS ---
+@tool
+async def retrieve_document_evidence(query: str, config: RunnableConfig, document_type: str = None) -> list:
+    '''Retrieves evidence from user-uploaded documents.'''
+    user_id = config.get("configurable", {}).get("user_id")
+    if not user_id:
+        return [{"error": "Unauthorized: No user_id in context"}]
+    async with AsyncSessionLocal() as db:
+        docs = await retrieve_documents(query=query, user_id=user_id, db=db)
+        return [{"content": d.content, "page_number": d.page_number, "filename": d.document.filename if d.document else "Unknown"} for d in docs]
+
 # --- AGENTS ---
 # Using temperature=0.1 for more deterministic orchestration
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0.1)
@@ -138,18 +154,37 @@ async def budgeting_node(state: AgentState, config: RunnableConfig):
     res = await budgeting_agent.ainvoke({"messages": state["messages"]}, config)
     return {"messages": [res["messages"][-1]]}
 
+
+document_agent_prompt = '''You are a Document Intelligence Agent.
+You answer questions ONLY using the evidence provided by the retrieve_document_evidence tool.
+CITATIONS ARE MANDATORY. For every claim, you must append [Filename, Page X].
+Do NOT create fake citations. Do NOT attempt to guess, infer, or hallucinate.
+If the evidence does not contain the answer, you must reply EXACTLY: 'I cannot find evidence for this in your documents.'
+Your answers must be 100% grounded in the retrieved chunks.'''
+
+document_agent = create_react_agent(
+    llm,
+    tools=[retrieve_document_evidence],
+    prompt=document_agent_prompt
+)
+
+async def document_node(state: AgentState, config: RunnableConfig):
+    res = await document_agent.ainvoke({"messages": state["messages"]}, config)
+    return {"messages": [res["messages"][-1]]}
+
 # Router
 class Router(TypedDict):
-    agents: List[Literal["Tax_Agent", "Quant_Agent", "Budgeting_Agent", "FINISH"]]
+    agents: List[Literal["Tax_Agent", "Quant_Agent", "Budgeting_Agent", "Document_Agent", "FINISH"]]
     reason: str
 
-supervisor_prompt = """You are a Supervisor orchestrating financial agents: Tax_Agent, Quant_Agent, Budgeting_Agent.
+supervisor_prompt = """You are a Supervisor orchestrating financial agents: Tax_Agent, Quant_Agent, Budgeting_Agent, Document_Agent.
 User Query: {query}
 
 Decide which agent(s) need to act. 
 - If the user asks about taxes, route to Tax_Agent.
 - If they ask about stocks or market, route to Quant_Agent.
 - If they ask about their income, spending, assets, or liabilities, route to Budgeting_Agent.
+  - If the user is asking about an uploaded document, PDF, Form 16, or policy, route to Document_Agent.
 - If you need data from multiple domains, route to ONE agent at a time.
 - Once you have enough information to answer the user fully, route to FINISH.
 
@@ -175,9 +210,10 @@ workflow = StateGraph(AgentState)
 workflow.add_node("Tax_Agent", tax_node)
 workflow.add_node("Quant_Agent", quant_node)
 workflow.add_node("Budgeting_Agent", budgeting_node)
+workflow.add_node("Document_Agent", document_node)
 workflow.add_node("supervisor", supervisor_node)
 
-for member in ["Tax_Agent", "Quant_Agent", "Budgeting_Agent"]:
+for member in ["Tax_Agent", "Quant_Agent", "Budgeting_Agent", "Document_Agent"]:
     workflow.add_edge(member, "supervisor")
 
 workflow.add_edge(START, "supervisor")
@@ -188,8 +224,10 @@ workflow.add_conditional_edges(
         "Tax_Agent": "Tax_Agent",
         "Quant_Agent": "Quant_Agent",
         "Budgeting_Agent": "Budgeting_Agent",
+        "Document_Agent": "Document_Agent",
         "FINISH": END
     }
 )
 
 supervisor_app = workflow.compile()
+
