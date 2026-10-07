@@ -8,7 +8,7 @@ from sqlalchemy.future import select
 
 from models import database, schemas
 from api import auth_routes, deps, tax_routes
-from ai.agent import get_financial_agent
+from ai.supervisor import supervisor_app
 from seed.seed_db import seed_database
 
 @contextlib.asynccontextmanager
@@ -54,13 +54,14 @@ async def chat_with_chronofi(
     
     full_prompt = f"Context: {context}\nUser Query: {request.message}"
     
-    agent = get_financial_agent()
+    agent = supervisor_app
+    config = {'configurable': {'user_id': current_user.id}}
 
     async def event_stream():
         try:
             # astream_events is the modern LangGraph streaming method
             async for event in agent.astream_events(
-                {"messages": [("user", full_prompt)]}, 
+                {"messages": [("user", full_prompt)], "user_query": request.message, "user_id": current_user.id}, config=config, 
                 version="v1"
             ):
                 kind = event["event"]
@@ -89,3 +90,4 @@ async def reset_database():
     """Hackathon God-Mode endpoint: Resets DB and seeds personas instantly."""
     await seed_database()
     return {"message": "Database reset and seeded with Arjun and Priya personas."}
+
