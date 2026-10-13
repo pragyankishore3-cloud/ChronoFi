@@ -227,6 +227,119 @@ async def get_user_scenarios(
     return [r.results_summary for r in records if r.results_summary]
 
 
+@router.post(
+    "/confirm-liability",
+    response_model=schemas.ConfirmLiabilityResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Confirm Scenario and Record Real Liability",
+)
+async def confirm_liability_endpoint(
+    request: schemas.ConfirmLiabilityRequest,
+    current_user: database.User = Depends(deps.get_current_user),
+    db: AsyncSession = Depends(deps.get_db),
+):
+    """
+    Confirms an approved hypothetical scenario and creates an official liability
+    in the user's permanent profile. Updates scenario status to 'confirmed_liability'.
+    """
+    # 1. Fetch scenario and verify ownership
+    rec_res = await db.execute(
+        select(database.ScenarioRecord).where(
+            database.ScenarioRecord.id == request.scenario_id,
+            database.ScenarioRecord.user_id == current_user.id,
+        )
+    )
+    rec = rec_res.scalars().first()
+    if not rec:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Scenario record not found or access denied.",
+        )
+
+    params = rec.parameters or {}
+    p_val = request.principal or params.get("loan_principal", 1000000.0)
+    r_val = request.interest_rate or params.get("annual_interest_rate", 0.09)
+    t_val = request.tenure_months or params.get("loan_tenure_months", 60)
+
+    # 2. Compute exact EMI if missing
+    emi_val = request.emi
+    if emi_val is None or emi_val <= 0:
+        if r_val > 0 and t_val > 0:
+            monthly_r = r_val / 12.0
+            emi_calc = p_val * (monthly_r * ((1.0 + monthly_r) ** t_val)) / (((1.0 + monthly_r) ** t_val) - 1.0)
+            emi_val = round(emi_calc, 2)
+        else:
+            emi_val = round(p_val / max(1, t_val), 2)
+
+    # 3. Create permanent Liability
+    liability = database.Liability(
+        user_id=current_user.id,
+        name=request.name or rec.name or "Car Loan",
+        principal_remaining=float(p_val),
+        interest_rate=float(r_val),
+        monthly_payment=float(emi_val),
+    )
+    db.add(liability)
+
+    # 4. Mark scenario as confirmed
+    rec.status = "confirmed_liability"
+    rec.updated_at = datetime.now(timezone.utc).isoformat()
+    await db.commit()
+    await db.refresh(liability)
+
+    return schemas.ConfirmLiabilityResponse(
+        success=True,
+        liability_id=liability.id,
+        name=liability.name,
+        principal=liability.principal_remaining,
+        interest_rate=liability.interest_rate,
+        monthly_payment=liability.monthly_payment,
+        scenario_status=rec.status,
+        message=f"Successfully confirmed and added {liability.name} of ₹{liability.principal_remaining:,.2f} to liabilities.",
+    )
+
+
+@router.get(
+    "/history/records",
+    response_model=List[schemas.HistoricalScenarioResponse],
+    summary="Get Detailed Scenario History with Versions",
+)
+async def get_scenario_history(
+    current_user: database.User = Depends(deps.get_current_user),
+    db: AsyncSession = Depends(deps.get_db),
+):
+    """
+    Retrieves full scenario history including versions, status, and parameter snapshots.
+    """
+    result = await db.execute(
+        select(database.ScenarioRecord)
+        .where(database.ScenarioRecord.user_id == current_user.id)
+        .order_by(database.ScenarioRecord.created_at.desc())
+    )
+    records = result.scalars().all()
+    return [
+        schemas.HistoricalScenarioResponse(
+            scenario_id=r.id,
+            user_id=r.user_id,
+            thread_id=r.thread_id,
+            name=r.name,
+            scenario_type=r.scenario_type,
+            parameters=r.parameters or {},
+            assumptions=r.assumptions or [],
+            baseline_id=r.baseline_id,
+            results_summary=r.results_summary,
+            version=r.version,
+            parent_scenario_id=r.parent_scenario_id,
+            status=r.status,
+            engine_version=r.engine_version,
+            created_at=r.created_at,
+            updated_at=r.updated_at,
+            is_current=True,
+        )
+        for r in records
+    ]
+
+
 @router.get(
     "/{scenario_id}",
     response_model=schemas.SimulateScenarioResponse,

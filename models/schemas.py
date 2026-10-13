@@ -61,10 +61,58 @@ class UserProfileResponse(UserBase):
 class ChatRequest(BaseModel):
     user_id: int
     message: str
+    thread_id: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str
     reasoning_logs: list | None = None
+    thread_id: Optional[str] = None
+
+class ConversationThreadResponse(BaseModel):
+    id: str
+    user_id: int
+    title: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+    class Config:
+        from_attributes = True
+
+class HistoricalScenarioResponse(BaseModel):
+    scenario_id: str
+    user_id: int
+    thread_id: Optional[str] = None
+    name: Optional[str] = None
+    scenario_type: str
+    parameters: dict[str, Any]
+    assumptions: Optional[list[Any]] = None
+    baseline_id: Optional[str] = None
+    results_summary: Optional[dict[str, Any]] = None
+    version: int = 1
+    parent_scenario_id: Optional[str] = None
+    status: str = "simulated"
+    engine_version: str = "1.0.0-crn"
+    created_at: str
+    updated_at: Optional[str] = None
+    is_current: bool = True
+
+class ConfirmLiabilityRequest(BaseModel):
+    scenario_id: str
+    name: Optional[str] = "Car Loan"
+    principal: Optional[float] = None
+    interest_rate: Optional[float] = None
+    tenure_months: Optional[int] = None
+    emi: Optional[float] = None
+
+class ConfirmLiabilityResponse(BaseModel):
+    success: bool
+    liability_id: int
+    name: str
+    principal: float
+    interest_rate: float
+    monthly_payment: float
+    scenario_status: str
+    message: str
 
 # --- WHAT-IF SCENARIO SCHEMAS ---
 

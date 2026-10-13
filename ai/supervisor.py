@@ -215,8 +215,12 @@ async def supervisor_node(state: AgentState, config: RunnableConfig):
     query = state.get("user_query", state["messages"][0].content if state["messages"] else "")
     q_lower = query.lower()
     
-    # Fast-path for What-If scenario queries
-    if any(k in q_lower for k in ["what happens", "what if", "car loan", "vehicle loan", "take a loan", "home loan"]):
+    # Fast-path for What-If scenario queries and historical memory retrieval
+    if any(k in q_lower for k in [
+        "what happens", "what if", "car loan", "vehicle loan", "take a loan", "home loan",
+        "remember", "last week", "we discussed", "earlier", "previous plan", "previous scenario",
+        "decided to take", "confirm loan", "record liability", "i decided"
+    ]):
         return {"next": "Scenario_Agent"}
 
     sys_msg = SystemMessage(content=supervisor_prompt.format(query=query))
@@ -228,7 +232,7 @@ async def supervisor_node(state: AgentState, config: RunnableConfig):
         return {"next": next_agent}
     except Exception:
         # Fallback for offline testing or LLM rate limits
-        return {"next": "Scenario_Agent" if "loan" in q_lower or "what" in q_lower else "FINISH"}
+        return {"next": "Scenario_Agent" if any(w in q_lower for w in ["loan", "what", "remember", "decide"]) else "FINISH"}
 
 # Graph
 workflow = StateGraph(AgentState)
@@ -256,5 +260,7 @@ workflow.add_conditional_edges(
     }
 )
 
-supervisor_app = workflow.compile()
+from core.checkpointer import get_checkpointer
+
+supervisor_app = workflow.compile(checkpointer=get_checkpointer())
 
