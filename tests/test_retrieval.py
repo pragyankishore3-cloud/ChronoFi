@@ -1,8 +1,4 @@
-import pytest
-
-pytestmark = pytest.mark.skip(reason="Missing DocumentType and DocumentStatus mapping in the tests")
-from unittest.mock import patch
-
+from unittest.mock import AsyncMock, patch
 import pytest
 
 from engine.vector_store import retrieve_documents
@@ -33,7 +29,9 @@ async def test_semantic_retrieval_top_1(db_session, seeded_docs):
     """Exit Gate: Top-1 correct-source rate >= 80%"""
     mock_query_emb = [0.95, 0.05, 0.0] # Very close to chunk1
     
-    with patch("engine.vector_store.embeddings_model.aembed_query", return_value=mock_query_emb):
+    with patch("engine.vector_store.embeddings_model") as mock_model:
+        mock_model.aembed_query = AsyncMock(return_value=mock_query_emb)
+        mock_model.embed_query.return_value = mock_query_emb
         results = await retrieve_documents("What is my salary?", user_id=1, db=db_session, top_k=1)
         
     assert len(results) == 1
@@ -44,7 +42,9 @@ async def test_metadata_filtering(db_session, seeded_docs):
     """Ensure metadata filtering restricts search space."""
     mock_query_emb = [0.9, 0.1, 0.0]
     
-    with patch("engine.vector_store.embeddings_model.aembed_query", return_value=mock_query_emb):
+    with patch("engine.vector_store.embeddings_model") as mock_model:
+        mock_model.aembed_query = AsyncMock(return_value=mock_query_emb)
+        mock_model.embed_query.return_value = mock_query_emb
         # We query for salary but filter by LOAN type. It should return nothing or low similarity.
         results = await retrieve_documents(
             "What is my salary?", 
@@ -63,7 +63,9 @@ async def test_unsupported_answer_rejection(db_session, seeded_docs):
     # Query completely unrelated to anything in the DB
     mock_query_emb = [-0.9, -0.9, -0.9]
     
-    with patch("engine.vector_store.embeddings_model.aembed_query", return_value=mock_query_emb):
+    with patch("engine.vector_store.embeddings_model") as mock_model:
+        mock_model.aembed_query = AsyncMock(return_value=mock_query_emb)
+        mock_model.embed_query.return_value = mock_query_emb
         results = await retrieve_documents("What is the recipe for cake?", user_id=1, db=db_session, similarity_threshold=0.70)
         
     # Should return empty list because all chunks fail the 0.70 threshold
@@ -74,7 +76,9 @@ async def test_cross_user_retrieval(db_session, seeded_docs):
     """Exit Gate: Cross-user retrieval must always remain zero."""
     mock_query_emb = [0.9, 0.1, 0.0]
     
-    with patch("engine.vector_store.embeddings_model.aembed_query", return_value=mock_query_emb):
+    with patch("engine.vector_store.embeddings_model") as mock_model:
+        mock_model.aembed_query = AsyncMock(return_value=mock_query_emb)
+        mock_model.embed_query.return_value = mock_query_emb
         # Querying with user_id=99 who has no documents
         results = await retrieve_documents("What is my salary?", user_id=99, db=db_session)
         

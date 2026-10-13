@@ -1,8 +1,4 @@
-import pytest
-
-pytestmark = pytest.mark.skip(reason="Missing implementation for document pipeline")
 from unittest.mock import patch
-
 import pytest
 
 from engine.pdf_processor import (

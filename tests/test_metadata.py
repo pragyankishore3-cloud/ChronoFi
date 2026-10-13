@@ -1,9 +1,5 @@
-import pytest
-
-pytestmark = pytest.mark.skip(reason="Missing implementation for metadata model confidence fallback")
 import os
 from unittest.mock import MagicMock, patch
-
 import pytest
 
 from engine.metadata_extractor import DocumentMetadataExtraction, extract_metadata

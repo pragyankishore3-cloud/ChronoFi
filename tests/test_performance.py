@@ -1,12 +1,10 @@
-import pytest
-
-pytestmark = pytest.mark.skip(reason="Missing endpoint /api/documents/upload")
 import asyncio
-from unittest.mock import AsyncMock, patch
-
+import time
+from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from core.security import create_access_token
 from engine.pdf_processor import process_document_pipeline
 from main import app
 from models.database import DocumentStatus
@@ -14,19 +12,14 @@ from models.database import DocumentStatus
 client = TestClient(app)
 
 @pytest.mark.asyncio
-async def test_upload_api_response_latency(mock_current_user):
+async def test_upload_api_response_latency(client, mock_current_user):
     """Exit Gate: Upload API response < 500ms and doesn't block."""
-    import time
-    
-    # We are using the TestClient which is synchronous, but the backend is async.
-    # To test that the endpoint responds quickly (offloading work to background),
-    # we just measure the response time of the client.
-    
+    token = create_access_token(data={"sub": str(mock_current_user.id)})
     start = time.time()
-    response = client.post(
+    response = await client.post(
         "/api/documents/upload",
-        files={"file": ("test.pdf", b"dummy pdf content", "application/pdf")},
-        headers={"Authorization": "Bearer mock_token"}
+        files={"file": ("test.pdf", b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF", "application/pdf")},
+        headers={"Authorization": f"Bearer {token}"}
     )
     end = time.time()
     
@@ -63,8 +56,10 @@ async def test_extraction_does_not_block_event_loop():
             mock_doc.status = DocumentStatus.UPLOADED
             mock_doc.file_path = "path"
             
+            mock_result = MagicMock()
+            mock_result.scalars.return_value.first.return_value = mock_doc
             mock_db = AsyncMock()
-            mock_db.execute.return_value.scalars.return_value.first.return_value = mock_doc
+            mock_db.execute.return_value = mock_result
             
             async def concurrent_task():
                 await asyncio.sleep(0.1)

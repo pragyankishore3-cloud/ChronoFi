@@ -4,13 +4,24 @@ import json
 from typing import List, Optional
 import uuid
 
+from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from ai.supervisor import supervisor_app
-from api import auth_routes, deps, profile_routes, scenario_routes, tax_routes
+from api import (
+    auth_routes,
+    debt_routes,
+    deps,
+    document_routes,
+    health_routes,
+    profile_routes,
+    scenario_routes,
+    stress_routes,
+    tax_routes,
+)
 from core import checkpointer
 from models import database, schemas
 from seed.seed_db import seed_database
@@ -40,10 +51,28 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Chronofi Backend API", description="Enterprise Financial Planning Engine", lifespan=lifespan)
 
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+@app.get("/", response_class=HTMLResponse)
+async def serve_index():
+    """Serves the ChronoFi Copilot frontend landing page."""
+    index_file = STATIC_DIR / "index.html"
+    if index_file.exists():
+        return HTMLResponse(content=index_file.read_text(encoding="utf-8"), status_code=200)
+    return HTMLResponse(content="<html><body><h1>ChronoFi Copilot</h1></body></html>", status_code=200)
+
+
 # Mount Routes
 app.include_router(auth_routes.router, prefix="/api/auth", tags=["auth"])
 app.include_router(profile_routes.router, prefix="/api/profile", tags=["profile"])
 app.include_router(tax_routes.router, prefix="/api/tax", tags=["tax"])
+app.include_router(stress_routes.router, prefix="/api/stress", tags=["stress"])
+app.include_router(debt_routes.router, prefix="/api/debt", tags=["debt"])
+app.include_router(health_routes.router, prefix="/api/health", tags=["health"])
+app.include_router(document_routes.router, prefix="/api/documents", tags=["documents"])
 app.include_router(scenario_routes.router, prefix="/api/v1/financial-scenarios", tags=["scenarios"])
 
 
