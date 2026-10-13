@@ -1,31 +1,34 @@
-name: Chronofi Backend CI
+name: ChronoFi Backend CI
 
 on:
   push:
-    branches: [ "master", "main" ]
+    branches: [ "master", "main", "feature/**" ]
   pull_request:
-    branches: [ "master", "main" ]
+    branches: [ "master", "main", "feature/**" ]
 
 jobs:
   test:
+    name: Backend Test Suite (108 Tests)
     runs-on: ubuntu-latest
+    env:
+      GEMINI_API_KEY: "dummy_ci_key"
+      JWT_SECRET_KEY: "test_secret_key_ci"
     steps:
     - uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: "3.11"
-        
+
     - name: Install uv
-      uses: astral-sh/setup-uv@v2
+      uses: astral-sh/setup-uv@v5
       with:
+        enable-cache: true
         version: "latest"
-        
+
+    - name: Set up Python 3.14
+      run: uv python install 3.14
+
     - name: Install dependencies
       run: |
         uv sync --dev
-        
-    - name: Run tests with pytest
+
+    - name: Run pytest test suite
       run: |
         uv run pytest tests/ -v
