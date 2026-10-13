@@ -1,26 +1,42 @@
 import contextlib
+from datetime import datetime, timezone
 import json
+from typing import List, Optional
+import uuid
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from ai.supervisor import supervisor_app
-from api import auth_routes, deps, tax_routes, scenario_routes
+from api import auth_routes, deps, scenario_routes, tax_routes
+from core import checkpointer
 from models import database, schemas
 from seed.seed_db import seed_database
 
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Run once on startup
+    # Ensure tables exist on startup
+    async with database.engine.begin() as conn:
+        await conn.run_sync(database.Base.metadata.create_all)
+
+    # Initialize durable checkpointer
+    await checkpointer.init_checkpointer()
+
+    # Seed if database is empty
     async with database.AsyncSessionLocal() as db:
         result = await db.execute(select(database.User))
         first_user = result.scalars().first()
         if not first_user:
             await seed_database()
+
     yield
+
+    # Clean up checkpointer on shutdown
+    await checkpointer.close_checkpointer()
+
 
 app = FastAPI(title="Chronofi Backend API", description="Enterprise Financial Planning Engine", lifespan=lifespan)
 
@@ -30,18 +46,57 @@ app.include_router(tax_routes.router, prefix="/api/tax", tags=["tax"])
 app.include_router(scenario_routes.router, prefix="/api/v1/financial-scenarios", tags=["scenarios"])
 app.include_router(scenario_routes.router, prefix="/api/scenarios", tags=["scenarios"])
 
+
 @app.get("/api/profile/me", response_model=schemas.UserProfileResponse)
 async def get_profile(current_user: database.User = Depends(deps.get_current_user)):
     return current_user
 
+
+@app.get("/api/v1/threads", response_model=List[schemas.ConversationThreadResponse])
+async def list_user_threads(
+    current_user: database.User = Depends(deps.get_current_user),
+    db: AsyncSession = Depends(deps.get_db),
+):
+    """Lists all active conversation threads belonging to the authenticated user."""
+    result = await db.execute(
+        select(database.ConversationThread)
+        .where(database.ConversationThread.user_id == current_user.id)
+        .order_by(database.ConversationThread.updated_at.desc())
+    )
+    return result.scalars().all()
+
+
+@app.get("/api/v1/threads/{thread_id}", response_model=schemas.ConversationThreadResponse)
+async def get_thread_info(
+    thread_id: str,
+    current_user: database.User = Depends(deps.get_current_user),
+    db: AsyncSession = Depends(deps.get_db),
+):
+    """Retrieves metadata for a specific thread. Enforces user isolation."""
+    result = await db.execute(
+        select(database.ConversationThread).where(database.ConversationThread.id == thread_id)
+    )
+    thread = result.scalars().first()
+    if not thread:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Thread not found.")
+    if thread.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: thread belongs to another user.",
+        )
+    return thread
+
+
 @app.get("/api/chat")
 async def chat_with_chronofi_get(
     message: str,
+    thread_id: Optional[str] = None,
     current_user: database.User = Depends(deps.get_current_user),
-    db: AsyncSession = Depends(deps.get_db)
+    db: AsyncSession = Depends(deps.get_db),
 ):
-    request = schemas.ChatRequest(user_id=current_user.id, message=message)
+    request = schemas.ChatRequest(user_id=current_user.id, message=message, thread_id=thread_id)
     return await chat_with_chronofi(request, current_user, db)
+
 
 @app.post("/api/chat")
 async def chat_with_chronofi(
@@ -49,11 +104,49 @@ async def chat_with_chronofi(
     current_user: database.User = Depends(deps.get_current_user),
     db: AsyncSession = Depends(deps.get_db)
 ):
-    # Ensure relationships are loaded properly if not eager loaded, but we used lazy='selectin'
-    # Build financial context
+    # 1. Resolve and authenticate thread ownership
+    now_str = datetime.now(timezone.utc).isoformat()
+    thread_id = request.thread_id
+
+    if thread_id:
+        t_res = await db.execute(
+            select(database.ConversationThread).where(database.ConversationThread.id == thread_id)
+        )
+        thread_obj = t_res.scalars().first()
+        if thread_obj:
+            if thread_obj.user_id != current_user.id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied: requested conversation thread belongs to another user.",
+                )
+            thread_obj.updated_at = now_str
+            await db.commit()
+        else:
+            # Register newly created thread ID for this user
+            new_thread = database.ConversationThread(
+                id=thread_id,
+                user_id=current_user.id,
+                title=request.message[:40],
+                created_at=now_str,
+                updated_at=now_str,
+            )
+            db.add(new_thread)
+            await db.commit()
+    else:
+        thread_id = str(uuid.uuid4())
+        new_thread = database.ConversationThread(
+            id=thread_id,
+            user_id=current_user.id,
+            title=request.message[:40],
+            created_at=now_str,
+            updated_at=now_str,
+        )
+        db.add(new_thread)
+        await db.commit()
+
+    # 2. Build financial context
     context = f"User Profile: {current_user.name}, Age: {current_user.age}, Salary: ₹{current_user.base_salary}. "
     
-    # Need to manually fetch the user with relationships loaded just in case it wasn't
     result = await db.execute(
         select(database.User).filter(database.User.id == current_user.id)
     )
@@ -67,14 +160,23 @@ async def chat_with_chronofi(
     full_prompt = f"Context: {context}\nUser Query: {request.message}"
     
     agent = supervisor_app
-    config = {'configurable': {'user_id': current_user.id}}
+    config = {'configurable': {'user_id': current_user.id, 'thread_id': thread_id}}
 
     async def event_stream():
         streamed_tokens = False
         try:
+            # Immediately notify frontend of active thread_id for conversation persistence
+            yield f"data: {json.dumps({'type': 'thread_id', 'thread_id': thread_id})}\n\n"
+
             # astream_events is the modern LangGraph streaming method
             async for event in agent.astream_events(
-                {"messages": [("user", full_prompt)], "user_query": request.message, "user_id": current_user.id}, config=config, 
+                {
+                    "messages": [("user", full_prompt)],
+                    "user_query": request.message,
+                    "user_id": current_user.id,
+                    "thread_id": thread_id,
+                },
+                config=config, 
                 version="v1"
             ):
                 kind = event["event"]
@@ -84,13 +186,12 @@ async def chat_with_chronofi(
                     content = event["data"]["chunk"].content
                     if content:
                         streamed_tokens = True
-                        # Server-Sent Event (SSE) format
                         yield f"data: {json.dumps({'type': 'token', 'content': content})}\n\n"
                         
                 # Stream tool execution logs to the frontend
                 elif kind == "on_tool_start":
                     tool_name = event.get("name")
-                    yield f"data: {json.dumps({'type': 'log', 'content': f'Invoking mathematical tool: {tool_name}'})}\n\n"
+                    yield f"data: {json.dumps({'type': 'log', 'content': f'Invoking tool: {tool_name}'})}\n\n"
 
                 # Stream structured scenario result when financial engine finishes
                 elif kind == "on_tool_end":
@@ -98,11 +199,13 @@ async def chat_with_chronofi(
                     tool_output = event.get("data", {}).get("output")
                     if tool_name == "run_financial_scenario" and isinstance(tool_output, dict):
                         yield f"data: {json.dumps({'type': 'scenario_result', 'data': tool_output})}\n\n"
+                    elif tool_name == "confirm_and_record_liability" and isinstance(tool_output, dict):
+                        yield f"data: {json.dumps({'type': 'liability_confirmed', 'data': tool_output})}\n\n"
 
                 # Stream final output if generated deterministically by presentation node
                 elif kind == "on_chain_end" and not streamed_tokens:
                     chain_name = event.get("name")
-                    if chain_name in ["Scenario_Agent", "present_scenario"]:
+                    if chain_name in ["Scenario_Agent", "present_scenario", "clarification_node", "execute_confirmation"]:
                         out = event.get("data", {}).get("output", {})
                         if isinstance(out, dict) and "messages" in out and out["messages"]:
                             content = out["messages"][-1].content
@@ -117,9 +220,9 @@ async def chat_with_chronofi(
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 
+
 @app.post("/admin/reset")
 async def reset_database():
     """Hackathon God-Mode endpoint: Resets DB and seeds personas instantly."""
     await seed_database()
     return {"message": "Database reset and seeded with Arjun and Priya personas."}
-

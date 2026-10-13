@@ -7,6 +7,7 @@ comparing baseline life financial plans against hypothetical financial decisions
 """
 
 from dataclasses import asdict, dataclass
+import json
 import math
 from typing import Any, List, Optional
 import numpy as np
@@ -94,7 +95,8 @@ class ScenarioSimulationResult:
     engine_version: str = "chronofi-sim-v1.0.0"
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        raw = asdict(self)
+        return json.loads(json.dumps(raw, default=lambda x: x.item() if hasattr(x, 'item') else x))
 
 
 def calculate_loan_amortization(

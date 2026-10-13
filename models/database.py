@@ -122,14 +122,33 @@ class KnowledgeBaseChunk(Base):
     topic = Column(String)
     embedding = Column(JSON)
 
+class ConversationThread(Base):
+    __tablename__ = "conversation_threads"
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True, nullable=False)
+    title = Column(String, nullable=True)
+    created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=False)
+
+    user = relationship("User", lazy="selectin")
+
+
 class ScenarioRecord(Base):
     __tablename__ = "scenario_records"
     id = Column(String, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    thread_id = Column(String, nullable=True, index=True)
+    name = Column(String, nullable=True)
     scenario_type = Column(String, nullable=False)
     parameters = Column(JSON, nullable=False)
+    assumptions = Column(JSON, nullable=True)
     baseline_id = Column(String, nullable=True)
     results_summary = Column(JSON, nullable=True)
+    version = Column(Integer, default=1, nullable=False)
+    parent_scenario_id = Column(String, nullable=True, index=True)
+    status = Column(String, default="simulated", nullable=False)  # simulated, confirmed_liability, archived
+    engine_version = Column(String, default="1.0.0-crn", nullable=False)
     created_at = Column(String, nullable=False)
+    updated_at = Column(String, nullable=True)
 
     user = relationship("User", lazy="selectin")

@@ -1,4 +1,5 @@
-﻿chronofi.db
+chronofi.db
+*.db
 __pycache__/
 *.pyc
 .env

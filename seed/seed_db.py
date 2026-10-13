@@ -1,11 +1,12 @@
 import asyncio
 
 from core.security import get_password_hash
-from models.database import Asset, AsyncSessionLocal, Goal, Liability, User
+import models.database as db_models
+from models.database import Asset, Goal, Liability, User
 
 
 async def seed_database():
-    async with AsyncSessionLocal() as db:
+    async with db_models.AsyncSessionLocal() as db:
         # Clear existing data
         await db.execute(Goal.__table__.delete())
         await db.execute(Liability.__table__.delete())
