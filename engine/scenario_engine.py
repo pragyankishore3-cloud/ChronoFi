@@ -195,7 +195,7 @@ def project_retirement_simulation(
         raise ValueError(f"Invalid base_salary: {base_salary}")
 
     # 1. Cash flow modeling
-    if estimated_monthly_expenses is None:
+    if estimated_monthly_expenses is None or estimated_monthly_expenses <= 0:
         # Default assumption: 50% of base salary for living expenses
         living_expenses = base_salary * 0.50
     else:

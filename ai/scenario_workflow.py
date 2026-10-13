@@ -287,7 +287,7 @@ async def load_financial_context(state: ScenarioWorkflowState, config: RunnableC
             "age": user.age,
             "base_salary": user.base_salary,
             "monthly_income": user.base_salary,
-            "monthly_expenses": 70000.0,
+            "monthly_expenses": user.monthly_expenses if user.monthly_expenses and user.monthly_expenses > 0 else (user.base_salary * 0.40),
             "existing_liabilities": [
                 {"name": l.name, "monthly_payment": l.monthly_payment, "principal": l.principal_remaining}
                 for l in user.liabilities

@@ -174,6 +174,7 @@ async def run_financial_scenario(
             loan_tenure_months=loan_tenure_months,
             down_payment=down_payment,
             monthly_vehicle_expenses=monthly_vehicle_expenses,
+            estimated_monthly_expenses=user.monthly_expenses if (user.monthly_expenses and user.monthly_expenses > 0) else None,
             expected_annual_return=weighted_return,
             inflation_rate=inflation_rate,
             num_simulations=500,
