@@ -221,6 +221,27 @@ class TrajectoryPointSchema(BaseModel):
     modified_worst: float
     target_corpus: float
 
+class GoalConflictItemSchema(BaseModel):
+    goal_id: Optional[int] = None
+    name: str
+    priority: str
+    target_amount: float
+    target_years: int
+    inflated_target: float
+    monthly_sip_required: float
+    baseline_monthly_allocated: float
+    baseline_projected_corpus: float
+    baseline_funding_ratio: float
+    baseline_status: str
+    modified_monthly_allocated: float
+    modified_projected_corpus: float
+    modified_funding_ratio: float
+    modified_status: str
+    monthly_allocation_change: float
+    corpus_shortfall: float
+    projected_delay_months: int
+    trade_off_note: str
+
 class SimulateScenarioResponse(BaseModel):
     scenario_id: str
     scenario_type: str
@@ -233,4 +254,5 @@ class SimulateScenarioResponse(BaseModel):
     alternatives: list[AlternativeScenarioSchema] = []
     trajectory: list[TrajectoryPointSchema] = []
     warnings: list[str] = []
+    goal_impacts: list[GoalConflictItemSchema] = []
     engine_version: str = "chronofi-sim-v1.0.0"

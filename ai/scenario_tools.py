@@ -161,6 +161,18 @@ async def run_financial_scenario(
             if parent:
                 version = parent.version + 1
 
+        user_goals_data = [
+            {
+                "id": g.id,
+                "name": g.name,
+                "target_amount": g.target_amount,
+                "target_years": g.target_years,
+                "priority": g.priority.value if hasattr(g.priority, "value") else str(g.priority),
+                "inflation_rate": g.inflation_rate or 0.06,
+            }
+            for g in user.goals
+        ] if user.goals else None
+
         # Execute Engine Simulation
         sim_res = project_retirement_simulation(
             current_age=user.age,
@@ -181,6 +193,7 @@ async def run_financial_scenario(
             seed=42,
             scenario_type=scenario_type,
             assumptions_list=assumptions,
+            user_goals=user_goals_data,
         )
 
         res_dict = sim_res.to_dict()
