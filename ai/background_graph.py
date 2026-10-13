@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Any, Dict, Optional, TypedDict
+from typing import Any, Dict, Optional, TypedDict, Union
 
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -15,10 +15,10 @@ logger = logging.getLogger(__name__)
 class BackgroundEvaluatorState(TypedDict, total=False):
     """
     Structured payload state designed specifically for background financial evaluations.
-    Unlike conversational graphs, this maintains system state payloads (user attributes,
-    event triggers, tax limits, and generated proactive alert text).
+    Maintains system state payloads (user attributes, event triggers, tax limits,
+    and generated proactive alert text).
     """
-    user_id: int | str
+    user_id: Union[int, str]
     user_name: Optional[str]
     financial_event: str
     remaining_80c_limit: float
@@ -26,10 +26,18 @@ class BackgroundEvaluatorState(TypedDict, total=False):
     alert_message: str
 
 
+# Safe API key resolution ensuring Pydantic does not crash during import/collection in CI
+api_key = (
+    os.getenv("GOOGLE_API_KEY")
+    or os.getenv("GEMINI_API_KEY")
+    or "dummy_test_key_so_pydantic_does_not_crash"
+)
+
 # Initialize Gemini 3.5 Pro for headless financial reasoning
 llm = ChatGoogleGenerativeAI(
     model="gemini-3.5-pro",
     temperature=0.2,
+    google_api_key=api_key,
 )
 
 
