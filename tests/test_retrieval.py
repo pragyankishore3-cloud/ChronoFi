@@ -1,12 +1,13 @@
 import pytest
+
 pytestmark = pytest.mark.skip(reason="Missing DocumentType and DocumentStatus mapping in the tests")
-import pytest
-import os
-import numpy as np
 from unittest.mock import patch
 
-from models.database import Document, DocumentChunk, DocumentStatus, DocumentType
+import pytest
+
 from engine.vector_store import retrieve_documents
+from models.database import Document, DocumentChunk, DocumentStatus, DocumentType
+
 
 @pytest.fixture
 async def seeded_docs(db_session):

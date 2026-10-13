@@ -1,11 +1,8 @@
 import asyncio
-import os
-import json
-from unittest.mock import patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
 from langchain_core.messages import HumanMessage
 
-from models.database import DocumentChunk, Document, DocumentStatus, DocumentType
-from engine.vector_store import retrieve_documents
 from ai.supervisor import document_agent
 
 # ---------------------------------------------------------

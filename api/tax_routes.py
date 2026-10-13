@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from engine.tax_calc import calculate_new_regime_tax, calculate_old_regime_tax
+
 from api.deps import get_current_user
+from engine.tax_calc import calculate_new_regime_tax, calculate_old_regime_tax
 from models.database import User
 
 router = APIRouter()

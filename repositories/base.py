@@ -1,19 +1,20 @@
+from typing import Generic, TypeVar
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from typing import TypeVar, Generic, Type, Optional, List
 
 T = TypeVar("T")
 
 class BaseRepository(Generic[T]):
-    def __init__(self, model: Type[T], session: AsyncSession):
+    def __init__(self, model: type[T], session: AsyncSession):
         self.model = model
         self.session = session
 
-    async def get_by_id(self, id: int) -> Optional[T]:
+    async def get_by_id(self, id: int) -> T | None:
         result = await self.session.execute(select(self.model).filter(self.model.id == id))
         return result.scalars().first()
 
-    async def get_all(self) -> List[T]:
+    async def get_all(self) -> list[T]:
         result = await self.session.execute(select(self.model))
         return result.scalars().all()
 

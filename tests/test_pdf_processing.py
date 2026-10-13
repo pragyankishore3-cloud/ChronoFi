@@ -1,15 +1,17 @@
 import pytest
+
 pytestmark = pytest.mark.skip(reason="Missing implementation for document pipeline")
+from unittest.mock import patch
+
 import pytest
-import os
-from unittest.mock import patch, MagicMock
 
 from engine.pdf_processor import (
-    process_document_pipeline, 
-    extract_text_from_pdf, 
-    chunk_pages
+    chunk_pages,
+    extract_text_from_pdf,
+    process_document_pipeline,
 )
-from models.database import Document, DocumentStatus, DocumentChunk
+from models.database import Document, DocumentChunk, DocumentStatus
+
 
 # ---------------------------------------------------------
 # Mocking fitz (PyMuPDF) for testing without binary dependencies

@@ -1,10 +1,14 @@
 import pytest
+
 pytestmark = pytest.mark.skip(reason="Missing implementation for metadata model confidence fallback")
-import pytest
 import os
-from unittest.mock import patch, MagicMock
-from engine.metadata_extractor import extract_metadata, DocumentMetadataExtraction
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from engine.metadata_extractor import DocumentMetadataExtraction, extract_metadata
 from models.database import DocumentType
+
 
 def test_extract_metadata_success():
     """Exit Gate: Extracts metadata accurately with high confidence."""

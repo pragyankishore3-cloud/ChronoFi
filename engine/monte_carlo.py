@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def run_monte_carlo_sip(
     target_amount: float, 
     current_savings: float, 

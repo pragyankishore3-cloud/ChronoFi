@@ -1,12 +1,14 @@
 import pytest
-pytestmark = pytest.mark.skip(reason="Missing implementation for metadata extraction pipeline")
-import pytest
-import os
-import json
-from unittest.mock import patch, MagicMock
 
-from engine.metadata_extractor import extract_metadata, DocumentMetadataExtraction
+pytestmark = pytest.mark.skip(reason="Missing implementation for metadata extraction pipeline")
+import os
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from engine.metadata_extractor import DocumentMetadataExtraction, extract_metadata
 from models.database import DocumentType
+
 
 def test_extract_metadata_with_key_financial_data():
     """Exit Gate: Key-value extraction accuracy >= 95%."""

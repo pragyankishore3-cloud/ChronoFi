@@ -1,5 +1,5 @@
-import torch
-import torch.nn as nn
+from torch import nn
+
 
 class ChronoFiLSTM(nn.Module):
     def __init__(self, input_size=1, hidden_layer_size=50, output_size=1, num_layers=2, dropout=0.2):

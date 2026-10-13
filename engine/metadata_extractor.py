@@ -1,19 +1,20 @@
 import logging
-from typing import Optional
-from pydantic import BaseModel, Field
+
 from langchain_google_genai import ChatGoogleGenerativeAI
+from pydantic import BaseModel, Field
+
 from models.database import DocumentType
 
 logger = logging.getLogger(__name__)
 
 class DocumentMetadataExtraction(BaseModel):
     document_type: DocumentType = Field(description="The type of financial document.")
-    financial_year: Optional[str] = Field(None, description="The financial year (e.g. 2024-2025) if applicable.")
-    effective_date: Optional[str] = Field(None, description="The effective date or start date of the document (YYYY-MM-DD).")
-    publication_date: Optional[str] = Field(None, description="The date the document was published or generated (YYYY-MM-DD).")
-    issuer: Optional[str] = Field(None, description="The bank, insurance company, or institution that issued the document.")
+    financial_year: str | None = Field(None, description="The financial year (e.g. 2024-2025) if applicable.")
+    effective_date: str | None = Field(None, description="The effective date or start date of the document (YYYY-MM-DD).")
+    publication_date: str | None = Field(None, description="The date the document was published or generated (YYYY-MM-DD).")
+    issuer: str | None = Field(None, description="The bank, insurance company, or institution that issued the document.")
     confidence: float = Field(description="Confidence score between 0.0 and 1.0 of the overall extraction accuracy.")
-    key_financial_data: Optional[dict] = Field(default_factory=dict, description="Extracted structured key-value pairs (e.g. Gross Salary, Total Tax).")
+    key_financial_data: dict | None = Field(default_factory=dict, description="Extracted structured key-value pairs (e.g. Gross Salary, Total Tax).")
 
 def extract_metadata(pages_text: list[dict], filename: str) -> dict:
     """
@@ -62,7 +63,7 @@ def extract_metadata(pages_text: list[dict], filename: str) -> dict:
         }
         
     except Exception as e:
-        logger.error(f"Failed to extract metadata: {str(e)}")
+        logger.error(f"Failed to extract metadata: {e!s}")
         return _fallback_metadata()
 
 def _fallback_metadata() -> dict:

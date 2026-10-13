@@ -1,13 +1,10 @@
-import os
 import logging
+import os
+
 import fitz  # PyMuPDF
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-
-
-
 
 from models.database import Document, DocumentChunk, DocumentStatus
 
@@ -84,7 +81,7 @@ async def process_document_pipeline(document_id: int, db: AsyncSession):
         logger.info(f"Document {document_id} successfully processed and embedded into {len(chunks)} chunks.")
 
     except Exception as e:
-        logger.error(f"Failed to process document {document_id}: {str(e)}")
+        logger.error(f"Failed to process document {document_id}: {e!s}")
         doc.status = DocumentStatus.FAILED
         await db.commit()
         raise e
@@ -116,7 +113,7 @@ def extract_text_from_pdf(file_path: str) -> list[dict]:
                         "text": clean_text
                     })
     except Exception as e:
-        raise RuntimeError(f"PyMuPDF failed to extract text: {str(e)}")
+        raise RuntimeError(f"PyMuPDF failed to extract text: {e!s}")
         
     return pages
 

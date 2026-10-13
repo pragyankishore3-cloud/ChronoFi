@@ -1,5 +1,7 @@
 import time
+
 from engine.ml_forecaster import run_ml_forecaster
+
 
 def test_ml_engine():
     print("Testing ML Forecaster (PyTorch LSTM + MC Dropout)...")
@@ -17,7 +19,7 @@ def test_ml_engine():
     duration = (time.time() - start) * 1000
     print(f"ML Inference completed in {duration:.2f} ms")
     print(f"Probability of Success: {result['probability_of_success_percent']}%")
-    print(f"Original Target: 5000000")
+    print("Original Target: 5000000")
     print(f"Inflated Target (Naive 6%): {result['median_inflated_target']}")
     print(f"Expected Portfolio: {result['expected_50th_percentile']}")
     print(f"Worst Case (10th Percentile): {result['worst_case_10th_percentile']}")

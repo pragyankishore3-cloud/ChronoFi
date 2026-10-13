@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def run_advanced_monte_carlo(
     target_amount: float,
     current_savings: float,

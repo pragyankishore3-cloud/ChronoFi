@@ -1,13 +1,14 @@
 import pytest
+
 pytestmark = pytest.mark.skip(reason="Missing endpoint /api/documents/upload")
-import pytest
-import os
 import asyncio
-from unittest.mock import patch, AsyncMock
+from unittest.mock import AsyncMock, patch
+
+import pytest
 from fastapi.testclient import TestClient
 
-from main import app
 from engine.pdf_processor import process_document_pipeline
+from main import app
 from models.database import DocumentStatus
 
 client = TestClient(app)
@@ -42,7 +43,6 @@ async def test_extraction_does_not_block_event_loop():
     # We can mock extract_text_from_pdf to sleep synchronously
     # and assert that asyncio.gather runs it concurrently with another task.
     
-    from engine.pdf_processor import extract_text_from_pdf
     
     with patch("engine.pdf_processor.extract_text_from_pdf") as mock_extract:
         import time

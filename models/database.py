@@ -1,8 +1,9 @@
-from sqlalchemy import Column, Integer, String, Float, Enum, ForeignKey
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import declarative_base, relationship
 import enum
 import os
+
+from sqlalchemy import Column, Enum, Float, ForeignKey, Integer, String
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
 
@@ -71,8 +72,8 @@ class Goal(Base):
     inflation_rate = Column(Float, default=0.06)
     
     user = relationship("User", back_populates="goals")
-import json
 from sqlalchemy import JSON
+
 
 class DocumentType(str, enum.Enum):
     TAX_RETURN = "Tax Return"
@@ -121,5 +122,14 @@ class KnowledgeBaseChunk(Base):
     topic = Column(String)
     embedding = Column(JSON)
 
+class ScenarioRecord(Base):
+    __tablename__ = "scenario_records"
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    scenario_type = Column(String, nullable=False)
+    parameters = Column(JSON, nullable=False)
+    baseline_id = Column(String, nullable=True)
+    results_summary = Column(JSON, nullable=True)
+    created_at = Column(String, nullable=False)
 
-
+    user = relationship("User", lazy="selectin")

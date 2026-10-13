@@ -1,4 +1,3 @@
-import json
 
 with open('ai/supervisor.py', 'r') as f:
     code = f.read()

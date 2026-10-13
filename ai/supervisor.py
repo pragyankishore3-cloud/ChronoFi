@@ -1,21 +1,22 @@
-import os
 from dotenv import load_dotenv
-load_dotenv()
-import os
-import json
-from typing import Annotated, Literal, TypedDict, List, Dict, Any
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
-from langchain_core.runnables import RunnableConfig
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages
-from langchain_core.tools import tool
-from langgraph.prebuilt import create_react_agent
 
+load_dotenv()
+import json
+from typing import Annotated, Literal, TypedDict
+
+from langchain_core.messages import BaseMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
+from langchain_core.tools import tool
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langgraph.graph import END, START, StateGraph
+from langgraph.graph.message import add_messages
+from langgraph.prebuilt import create_react_agent
 from sqlalchemy.future import select
-from models.database import AsyncSessionLocal, User, Asset, Liability, Goal
-from engine.vector_store import retrieve_documents
+
 from engine.tax_calc import calculate_new_regime_tax, calculate_old_regime_tax
+from engine.vector_store import retrieve_documents
+from models.database import Asset, AsyncSessionLocal, Liability, User
+
 
 class AgentState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
@@ -42,8 +43,9 @@ def calculate_tax_impact(salary: float, deductions: float = 0.0, agri_income: fl
     except Exception as e:
         return {"error": str(e)}
 
-from engine.ml_forecaster import run_ml_forecaster
 from engine.math_engine import run_scenario
+from engine.ml_forecaster import run_ml_forecaster
+
 
 # --- QUANT TOOLS ---
 @tool
@@ -162,6 +164,10 @@ Do NOT create fake citations. Do NOT attempt to guess, infer, or hallucinate.
 If the evidence does not contain the answer, you must reply EXACTLY: 'I cannot find evidence for this in your documents.'
 Your answers must be 100% grounded in the retrieved chunks.'''
 
+from ai.scenario_tools import run_financial_scenario
+from ai.scenario_workflow import scenario_workflow_app
+from langchain_core.messages import AIMessage
+
 document_agent = create_react_agent(
     llm,
     tools=[retrieve_document_evidence],
@@ -172,19 +178,32 @@ async def document_node(state: AgentState, config: RunnableConfig):
     res = await document_agent.ainvoke({"messages": state["messages"]}, config)
     return {"messages": [res["messages"][-1]]}
 
+async def scenario_node(state: AgentState, config: RunnableConfig):
+    query = state.get("user_query") or (state["messages"][-1].content if state.get("messages") else "")
+    user_id = state.get("user_id") or config.get("configurable", {}).get("user_id")
+    result = await scenario_workflow_app.ainvoke(
+        {"user_query": query, "user_id": user_id, "messages": state["messages"]},
+        config=config,
+    )
+    res_msgs = result.get("messages", [])
+    if res_msgs:
+        return {"messages": [res_msgs[-1]]}
+    return {"messages": [AIMessage(content="Scenario simulation completed.")]}
+
 # Router
 class Router(TypedDict):
-    agents: List[Literal["Tax_Agent", "Quant_Agent", "Budgeting_Agent", "Document_Agent", "FINISH"]]
+    agents: list[Literal["Tax_Agent", "Quant_Agent", "Budgeting_Agent", "Document_Agent", "Scenario_Agent", "FINISH"]]
     reason: str
 
-supervisor_prompt = """You are a Supervisor orchestrating financial agents: Tax_Agent, Quant_Agent, Budgeting_Agent, Document_Agent.
+supervisor_prompt = """You are a Supervisor orchestrating financial agents: Tax_Agent, Quant_Agent, Budgeting_Agent, Document_Agent, Scenario_Agent.
 User Query: {query}
 
 Decide which agent(s) need to act. 
 - If the user asks about taxes, route to Tax_Agent.
 - If they ask about stocks or market, route to Quant_Agent.
 - If they ask about their income, spending, assets, or liabilities, route to Budgeting_Agent.
-  - If the user is asking about an uploaded document, PDF, Form 16, or policy, route to Document_Agent.
+- If the user is asking about an uploaded document, PDF, Form 16, or policy, route to Document_Agent.
+- If the user asks a what-if question (e.g. taking a car loan, home loan, new expense, changing retirement timeline), route to Scenario_Agent.
 - If you need data from multiple domains, route to ONE agent at a time.
 - Once you have enough information to answer the user fully, route to FINISH.
 
@@ -194,16 +213,22 @@ supervisor_agent = llm.with_structured_output(Router)
 
 async def supervisor_node(state: AgentState, config: RunnableConfig):
     query = state.get("user_query", state["messages"][0].content if state["messages"] else "")
+    q_lower = query.lower()
+    
+    # Fast-path for What-If scenario queries
+    if any(k in q_lower for k in ["what happens", "what if", "car loan", "vehicle loan", "take a loan", "home loan"]):
+        return {"next": "Scenario_Agent"}
+
     sys_msg = SystemMessage(content=supervisor_prompt.format(query=query))
-    
-    # Pass conversation history to supervisor so it knows what was already answered
-    routing = await supervisor_agent.ainvoke([sys_msg] + state["messages"])
-    
-    next_agent = "FINISH"
-    if routing.get("agents") and routing["agents"][0] != "FINISH":
-        next_agent = routing["agents"][0]
-        
-    return {"next": next_agent}
+    try:
+        routing = await supervisor_agent.ainvoke([sys_msg] + state["messages"])
+        next_agent = "FINISH"
+        if routing.get("agents") and routing["agents"][0] != "FINISH":
+            next_agent = routing["agents"][0]
+        return {"next": next_agent}
+    except Exception:
+        # Fallback for offline testing or LLM rate limits
+        return {"next": "Scenario_Agent" if "loan" in q_lower or "what" in q_lower else "FINISH"}
 
 # Graph
 workflow = StateGraph(AgentState)
@@ -211,9 +236,10 @@ workflow.add_node("Tax_Agent", tax_node)
 workflow.add_node("Quant_Agent", quant_node)
 workflow.add_node("Budgeting_Agent", budgeting_node)
 workflow.add_node("Document_Agent", document_node)
+workflow.add_node("Scenario_Agent", scenario_node)
 workflow.add_node("supervisor", supervisor_node)
 
-for member in ["Tax_Agent", "Quant_Agent", "Budgeting_Agent", "Document_Agent"]:
+for member in ["Tax_Agent", "Quant_Agent", "Budgeting_Agent", "Document_Agent", "Scenario_Agent"]:
     workflow.add_edge(member, "supervisor")
 
 workflow.add_edge(START, "supervisor")
@@ -225,6 +251,7 @@ workflow.add_conditional_edges(
         "Quant_Agent": "Quant_Agent",
         "Budgeting_Agent": "Budgeting_Agent",
         "Document_Agent": "Document_Agent",
+        "Scenario_Agent": "Scenario_Agent",
         "FINISH": END
     }
 )

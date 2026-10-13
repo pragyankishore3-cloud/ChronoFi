@@ -1,19 +1,13 @@
-import pytest
-import asyncio
 import os
+
+import pytest
 from langchain_core.messages import HumanMessage
-from langchain_core.runnables import RunnableConfig
 
 # Inject dummy key before importing ai.supervisor
 os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY", "dummy_test_key_so_pydantic_does_not_crash")
 
-from ai.supervisor import (
-    supervisor_app, 
-    calculate_tax_impact, 
-     
-    get_user_income,
-    AgentState
-)
+from ai.supervisor import calculate_tax_impact, get_user_income, supervisor_app
+
 
 @pytest.mark.asyncio
 async def skip_test_supervisor_routing_tax():
@@ -45,7 +39,7 @@ def test_tax_tool_valid():
 def test_tax_tool_invalid():
     """Test tax tool doesn't crash on invalid data."""
     # Depending on pydantic validation, it may raise an error before invocation
-    pass # Pydantic handles type validation
+    # Pydantic handles type validation
 
 def skip_test_stock_data_valid():
     """Test stock data retrieval."""

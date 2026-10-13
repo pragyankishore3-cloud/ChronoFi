@@ -1,13 +1,12 @@
-import os
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select  # Updated import for SQLAlchemy 2.0
 from pydantic import BaseModel, ValidationError
+from sqlalchemy import select  # Updated import for SQLAlchemy 2.0
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.security import ALGORITHM, SECRET_KEY
 from models.database import AsyncSessionLocal, User
-from core.security import SECRET_KEY, ALGORITHM
 
 # Note: Ensure this URL matches your actual auth route prefix (e.g., "/api/token" or "/token")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/token")
@@ -42,8 +41,18 @@ async def get_current_user(
     except (JWTError, ValidationError, ValueError):
         raise credentials_exception
 
-    # Query using the user ID instead of the email, and use .where()
-    result = await db.execute(select(User).where(User.id == token_data.user_id))
+    from sqlalchemy.orm import selectinload
+
+    # Query using the user ID instead of the email, with eager relationships
+    result = await db.execute(
+        select(User)
+        .where(User.id == token_data.user_id)
+        .options(
+            selectinload(User.assets),
+            selectinload(User.liabilities),
+            selectinload(User.goals),
+        )
+    )
     user = result.scalars().first()
 
     if user is None:

@@ -1,6 +1,7 @@
-from pydantic import BaseModel, Field
-from typing import List, Optional
 from enum import Enum
+
+from pydantic import BaseModel
+
 
 class PriorityLevel(str, Enum):
     ESSENTIAL = "Essential"
@@ -50,9 +51,9 @@ class UserBase(BaseModel):
 
 class UserProfileResponse(UserBase):
     id: int
-    assets: List[AssetResponse] = []
-    liabilities: List[LiabilityResponse] = []
-    goals: List[GoalResponse] = []
+    assets: list[AssetResponse] = []
+    liabilities: list[LiabilityResponse] = []
+    goals: list[GoalResponse] = []
     
     class Config:
         from_attributes = True
@@ -63,4 +64,105 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str
-    reasoning_logs: Optional[list] = None
+    reasoning_logs: list | None = None
+
+# --- WHAT-IF SCENARIO SCHEMAS ---
+
+from typing import Any, Optional
+
+class ScenarioChanges(BaseModel):
+    loan_principal: float = 0.0
+    annual_interest_rate: float = 0.0
+    loan_tenure_months: int = 60
+    down_payment: float = 0.0
+    monthly_vehicle_expenses: float = 0.0
+    monthly_savings_change: float = 0.0
+    income_change: float = 0.0
+    expense_change: float = 0.0
+
+class SimulationSettings(BaseModel):
+    num_simulations: int = 1000
+    seed: int = 42
+    include_trajectory: bool = True
+    horizon_years: Optional[int] = None
+
+class AssumptionOverride(BaseModel):
+    expected_annual_return: Optional[float] = None
+    inflation_rate: Optional[float] = None
+    estimated_monthly_expenses: Optional[float] = None
+
+class SimulateScenarioRequest(BaseModel):
+    baseline_plan_id: Optional[str] = None
+    scenario_type: str = "vehicle_loan"
+    changes: ScenarioChanges
+    simulation_settings: SimulationSettings = SimulationSettings()
+    assumptions_override: Optional[AssumptionOverride] = None
+    idempotency_key: Optional[str] = None
+
+class ScenarioAssumptionSchema(BaseModel):
+    field: str
+    value: Any
+    source: str
+    description: str
+
+class LoanMetricsSchema(BaseModel):
+    monthly_emi: float
+    principal: float
+    annual_interest_rate: float
+    tenure_months: int
+    total_payment: float
+    total_interest: float
+    is_zero_interest: bool
+
+class ProjectionMetricsSchema(BaseModel):
+    retirement_age: float
+    projected_corpus: float
+    goal_success_probability: float
+    monthly_investable_surplus: float
+    worst_case_10th_percentile: float
+    expected_50th_percentile: float
+    best_case_90th_percentile: float
+    conditional_value_at_risk_cvar: float
+
+class ScenarioImpactSchema(BaseModel):
+    retirement_age_difference: float
+    corpus_difference: float
+    success_probability_difference: float
+    monthly_cash_flow_difference: float
+    total_interest_paid: float
+
+class AlternativeScenarioSchema(BaseModel):
+    name: str
+    description: str
+    loan_principal: float
+    loan_tenure_months: int
+    down_payment: float
+    monthly_emi: float
+    total_interest: float
+    projected_corpus: float
+    goal_success_probability: float
+    retirement_age_difference: float
+    trade_off_summary: str
+
+class TrajectoryPointSchema(BaseModel):
+    year: int
+    age: int
+    baseline_expected: float
+    modified_expected: float
+    baseline_worst: float
+    modified_worst: float
+    target_corpus: float
+
+class SimulateScenarioResponse(BaseModel):
+    scenario_id: str
+    scenario_type: str
+    status: str
+    effective_assumptions: list[ScenarioAssumptionSchema]
+    loan_metrics: Optional[LoanMetricsSchema] = None
+    baseline: ProjectionMetricsSchema
+    modified: ProjectionMetricsSchema
+    impact: ScenarioImpactSchema
+    alternatives: list[AlternativeScenarioSchema] = []
+    trajectory: list[TrajectoryPointSchema] = []
+    warnings: list[str] = []
+    engine_version: str = "chronofi-sim-v1.0.0"

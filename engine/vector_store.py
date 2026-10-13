@@ -1,11 +1,10 @@
-import os
 import logging
+from typing import Any
+
 import numpy as np
-from typing import List, Dict, Any
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import text
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 from models.database import DocumentChunk
 
@@ -14,7 +13,7 @@ logger = logging.getLogger(__name__)
 # Use Gemini embeddings optimized for retrieval
 embeddings_model = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
 
-async def embed_chunks(chunks: List[DocumentChunk], db: AsyncSession):
+async def embed_chunks(chunks: list[DocumentChunk], db: AsyncSession):
     """
     Generates embeddings for a batch of DocumentChunks and persists them.
     Ensures 100% of successfully processed chunks receive embeddings.
@@ -34,7 +33,7 @@ async def embed_chunks(chunks: List[DocumentChunk], db: AsyncSession):
         db.add_all(chunks)
         await db.commit()
     except Exception as e:
-        logger.error(f"Failed to generate embeddings: {str(e)}")
+        logger.error(f"Failed to generate embeddings: {e!s}")
         raise e
 
 async def retrieve_documents(
@@ -43,8 +42,8 @@ async def retrieve_documents(
     db: AsyncSession, 
     top_k: int = 5,
     similarity_threshold: float = 0.70,
-    filters: Dict[str, Any] = None
-) -> List[DocumentChunk]:
+    filters: dict[str, Any] = None
+) -> list[DocumentChunk]:
     """
     CRITICAL SECURITY RULE: Never perform unrestricted vector search.
     Always enforces authorization by filtering rigidly on user_id.
@@ -57,8 +56,9 @@ async def retrieve_documents(
     query_embedding = await embeddings_model.aembed_query(query)
     dialect = db.bind.dialect.name
     
-    from models.database import Document
     from sqlalchemy.orm import selectinload
+
+    from models.database import Document
     
     # Base query joined with Document for metadata filtering
     # Use selectinload to eagerly fetch the document for citations (filename)
@@ -116,7 +116,7 @@ async def retrieve_trusted_knowledge(
     db: AsyncSession, 
     top_k: int = 3,
     similarity_threshold: float = 0.70
-) -> List[Any]:
+) -> list[Any]:
     """
     Retrieves global trusted knowledge (tax codes, rules).
     Logically completely isolated from user data (queries KnowledgeBaseChunk).
