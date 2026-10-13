@@ -78,13 +78,22 @@ from sqlalchemy import JSON
 
 class DocumentType(str, enum.Enum):
     TAX_RETURN = "Tax Return"
+    FORM_16 = "Form 16"
     LOAN_STATEMENT = "Loan Statement"
+    LOAN = "Loan"
     INSURANCE = "Insurance"
+    INVESTMENT = "Investment"
+    SALARY_SLIP = "Salary Slip"
     OTHER = "Other"
     UNKNOWN = "Unknown"
 
 class DocumentStatus(str, enum.Enum):
+    UPLOADED = "UPLOADED"
     PROCESSING = "Processing"
+    EXTRACTING = "Extracting"
+    CHUNKING = "Chunking"
+    EMBEDDING = "Embedding"
+    INDEXED = "Indexed"
     COMPLETED = "Completed"
     READY = "Ready"
     FAILED = "Failed"
@@ -100,7 +109,11 @@ class Document(Base):
     document_type = Column(String)
     financial_year = Column(String)
     issuer = Column(String)
-    status = Column(Enum(DocumentStatus))
+    effective_date = Column(String, nullable=True)
+    publication_date = Column(String, nullable=True)
+    metadata_confidence = Column(Float, nullable=True)
+    extracted_data = Column(String, nullable=True)
+    status = Column(Enum(DocumentStatus), default=DocumentStatus.UPLOADED)
     
     chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan", lazy="selectin")
 

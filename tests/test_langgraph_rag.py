@@ -1,7 +1,4 @@
-import pytest
-
-pytestmark = pytest.mark.skip(reason="Missing implementation for RAG workflow steps")
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from langchain_core.messages import HumanMessage
@@ -31,7 +28,9 @@ async def test_supervisor_routes_to_document_agent(base_state):
     # We mock the structured output call to mimic LLM routing
     mock_routing = {"agents": ["Document_Agent"], "reason": "User is asking about an uploaded document."}
     
-    with patch("ai.supervisor.supervisor_agent.ainvoke", return_value=mock_routing):
+    mock_agent = AsyncMock()
+    mock_agent.ainvoke = AsyncMock(return_value=mock_routing)
+    with patch("ai.supervisor.supervisor_agent", mock_agent):
         result = await supervisor_node(base_state, config={"configurable": {"user_id": 1}})
         
     assert result["next"] == "Document_Agent"
@@ -44,7 +43,9 @@ async def test_supervisor_routes_away_from_document_agent(base_state):
     
     mock_routing = {"agents": ["Tax_Agent"], "reason": "General tax question."}
     
-    with patch("ai.supervisor.supervisor_agent.ainvoke", return_value=mock_routing):
+    mock_agent = AsyncMock()
+    mock_agent.ainvoke = AsyncMock(return_value=mock_routing)
+    with patch("ai.supervisor.supervisor_agent", mock_agent):
         result = await supervisor_node(base_state, config={"configurable": {"user_id": 1}})
         
     assert result["next"] == "Tax_Agent"
@@ -56,8 +57,11 @@ async def test_supervisor_finishes_when_done(base_state):
     
     mock_routing = {"agents": ["FINISH"], "reason": "Conversation is over."}
     
-    with patch("ai.supervisor.supervisor_agent.ainvoke", return_value=mock_routing):
+    mock_agent = AsyncMock()
+    mock_agent.ainvoke = AsyncMock(return_value=mock_routing)
+    with patch("ai.supervisor.supervisor_agent", mock_agent):
         result = await supervisor_node(base_state, config={"configurable": {"user_id": 1}})
         
     assert result["next"] == "FINISH"
+
 

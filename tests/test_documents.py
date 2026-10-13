@@ -1,8 +1,4 @@
-import pytest
-
-pytestmark = pytest.mark.skip(reason="Missing endpoint /api/documents/upload")
 import asyncio
-
 import pytest
 from httpx import AsyncClient
 
@@ -20,8 +16,12 @@ async def auth_client(client, test_user):
         data={"username": "test@chronofi.demo", "password": "password123"}
     )
     token = login_res.json()["access_token"]
-    client.headers.update({"Authorization": f"Bearer {token}"})
-    return client
+    from httpx import ASGITransport
+    from main import app
+    ac = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+    ac.headers.update({"Authorization": f"Bearer {token}"})
+    yield ac
+    await ac.aclose()
 
 @pytest.fixture
 async def another_user_client(client, db_session):

@@ -6,7 +6,7 @@ comparing baseline life financial plans against hypothetical financial decisions
 (loans, expenses, income changes, savings adjustments).
 """
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 import json
 import math
 from typing import Any, List, Optional
@@ -80,6 +80,29 @@ class TrajectoryPoint:
 
 
 @dataclass
+class GoalConflictItem:
+    goal_id: Optional[int]
+    name: str
+    priority: str  # "Essential", "Important", "Aspirational"
+    target_amount: float
+    target_years: int
+    inflated_target: float
+    monthly_sip_required: float
+    baseline_monthly_allocated: float
+    baseline_projected_corpus: float
+    baseline_funding_ratio: float
+    baseline_status: str  # "On Track", "At Risk", "Underfunded"
+    modified_monthly_allocated: float
+    modified_projected_corpus: float
+    modified_funding_ratio: float
+    modified_status: str  # "On Track", "At Risk", "Underfunded"
+    monthly_allocation_change: float
+    corpus_shortfall: float
+    projected_delay_months: int
+    trade_off_note: str
+
+
+@dataclass
 class ScenarioSimulationResult:
     scenario_id: str
     scenario_type: str
@@ -92,6 +115,7 @@ class ScenarioSimulationResult:
     alternatives: List[AlternativeScenario]
     trajectory: List[TrajectoryPoint]
     warnings: List[str]
+    goal_impacts: List[GoalConflictItem] = field(default_factory=list)
     engine_version: str = "chronofi-sim-v1.0.0"
 
     def to_dict(self) -> dict:
@@ -161,6 +185,188 @@ def calculate_loan_amortization(
     )
 
 
+def calculate_multi_goal_waterfall(
+    goals: List[dict],
+    baseline_surplus: float,
+    modified_surplus: float,
+    expected_annual_return: float = 0.105,
+    loan_tenure_months: int = 60,
+) -> List[GoalConflictItem]:
+    """
+    Deterministically computes priority waterfall allocation of monthly investable surplus
+    across competing life financial goals.
+    
+    Priority Waterfall:
+    1. 'Essential' (Emergency Fund, Retirement, Primary Residence)
+    2. 'Important' (Higher Education, Health Buffer, Vehicle)
+    3. 'Aspirational' (Luxury Travel, Angel Bets, Lifestyle Upgrades)
+    
+    Returns a list of GoalConflictItem detailing baseline vs modified funding ratio,
+    corpus shortfall, delay in months, and clear trade-off explanations.
+    """
+    if not goals:
+        return []
+
+    r = expected_annual_return / 12.0
+
+    # 1. Normalize each goal and compute required SIP
+    parsed_goals = []
+    for idx, g in enumerate(goals):
+        g_id = g.get("id")
+        name = str(g.get("name") or f"Goal {idx+1}")
+        raw_priority = str(g.get("priority") or "Important")
+        if "essential" in raw_priority.lower():
+            priority = "Essential"
+        elif "aspirational" in raw_priority.lower():
+            priority = "Aspirational"
+        else:
+            priority = "Important"
+
+        target_amount = float(g.get("target_amount") or 0.0)
+        target_years = max(1, int(g.get("target_years") or 5))
+        inflation_rate = float(g.get("inflation_rate") if g.get("inflation_rate") is not None else 0.06)
+
+        total_months = target_years * 12
+        inflated_target = target_amount * math.pow(1.0 + inflation_rate, target_years)
+
+        # SIP required
+        if r > 0:
+            growth_factor = math.pow(1.0 + r, total_months)
+            sip_req = (inflated_target * r) / (growth_factor - 1.0)
+        else:
+            sip_req = inflated_target / total_months if total_months > 0 else inflated_target
+
+        parsed_goals.append({
+            "id": g_id,
+            "name": name,
+            "priority": priority,
+            "target_amount": target_amount,
+            "target_years": target_years,
+            "total_months": total_months,
+            "inflated_target": inflated_target,
+            "sip_required": max(0.0, sip_req),
+            "key": f"{name}_{idx}",
+        })
+
+    # Helper for waterfall allocation
+    def _allocate_surplus(surplus_pool: float) -> dict:
+        remaining = max(0.0, surplus_pool)
+        allocations = {}
+        for tier in ["Essential", "Important", "Aspirational"]:
+            tier_goals = [item for item in parsed_goals if item["priority"] == tier]
+            tier_needed = sum(item["sip_required"] for item in tier_goals)
+            if tier_needed <= 0:
+                for item in tier_goals:
+                    allocations[item["key"]] = 0.0
+                continue
+
+            if remaining >= tier_needed:
+                for item in tier_goals:
+                    allocations[item["key"]] = item["sip_required"]
+                remaining -= tier_needed
+            else:
+                fraction = remaining / tier_needed if tier_needed > 0 else 0.0
+                for item in tier_goals:
+                    allocations[item["key"]] = item["sip_required"] * fraction
+                remaining = 0.0
+        return allocations
+
+    base_allocations = _allocate_surplus(baseline_surplus)
+    mod_allocations = _allocate_surplus(max(0.0, modified_surplus))
+
+    # Helper to calculate future corpus
+    def _accumulate_corpus(monthly_sip: float, months: int) -> float:
+        if months <= 0:
+            return 0.0
+        if r > 0:
+            return monthly_sip * (math.pow(1.0 + r, months) - 1.0) / r
+        return monthly_sip * months
+
+    conflict_items = []
+    for item in parsed_goals:
+        key = item["key"]
+        M = item["total_months"]
+        F = item["inflated_target"]
+        L = max(0, loan_tenure_months)
+
+        base_sip = base_allocations.get(key, 0.0)
+        mod_sip = mod_allocations.get(key, 0.0)
+
+        # Baseline accumulated corpus
+        base_corpus = _accumulate_corpus(base_sip, M)
+        base_ratio = min(100.0, round((base_corpus / F) * 100.0, 1)) if F > 0 else 100.0
+        base_status = "On Track" if base_ratio >= 98.0 else ("At Risk" if base_ratio >= 75.0 else "Underfunded")
+
+        # Modified accumulated corpus with post-loan recovery
+        if M <= L:
+            # Entire horizon under reduced surplus
+            mod_corpus = _accumulate_corpus(mod_sip, M)
+        else:
+            # First L months at mod_sip, then compounds for M - L months + (M - L) months at base_sip
+            part1 = _accumulate_corpus(mod_sip, L) * math.pow(1.0 + r, M - L)
+            part2 = _accumulate_corpus(base_sip, M - L)
+            mod_corpus = part1 + part2
+
+        mod_ratio = min(100.0, round((mod_corpus / F) * 100.0, 1)) if F > 0 else 100.0
+        mod_status = "On Track" if mod_ratio >= 98.0 else ("At Risk" if mod_ratio >= 75.0 else "Underfunded")
+
+        shortfall = max(0.0, round(F - mod_corpus, 2))
+
+        # Calculate delay months
+        delay_months = 0
+        if mod_corpus < F and base_sip > 0:
+            curr = mod_corpus
+            while curr < F and delay_months < 240:
+                delay_months += 1
+                curr = (curr * (1.0 + r)) + base_sip
+            if delay_months >= 240:
+                delay_months = 999  # indicates indefinite or >20 year delay
+
+        # Formulate deterministic trade-off note
+        sip_change = round(mod_sip - base_sip, 2)
+        if mod_ratio >= 98.0 and base_ratio >= 98.0:
+            trade_off_note = f"Protected by {item['priority']} priority: Remains 100% on track."
+        elif mod_ratio < base_ratio:
+            ratio_drop = round(base_ratio - mod_ratio, 1)
+            if delay_months > 0 and delay_months < 999:
+                delay_str = f"+{delay_months} months delay"
+            elif delay_months >= 999:
+                delay_str = "significant timeline delay"
+            else:
+                delay_str = "minor timeline impact"
+            trade_off_note = (
+                f"Funding drops by {ratio_drop}% (₹{shortfall:,.0f} corpus shortfall). {delay_str}."
+            )
+        else:
+            trade_off_note = f"Pre-existing constraint: Funded at {mod_ratio}%."
+
+        conflict_items.append(
+            GoalConflictItem(
+                goal_id=item["id"],
+                name=item["name"],
+                priority=item["priority"],
+                target_amount=round(item["target_amount"], 2),
+                target_years=item["target_years"],
+                inflated_target=round(F, 2),
+                monthly_sip_required=round(item["sip_required"], 2),
+                baseline_monthly_allocated=round(base_sip, 2),
+                baseline_projected_corpus=round(base_corpus, 2),
+                baseline_funding_ratio=base_ratio,
+                baseline_status=base_status,
+                modified_monthly_allocated=round(mod_sip, 2),
+                modified_projected_corpus=round(mod_corpus, 2),
+                modified_funding_ratio=mod_ratio,
+                modified_status=mod_status,
+                monthly_allocation_change=sip_change,
+                corpus_shortfall=shortfall,
+                projected_delay_months=delay_months,
+                trade_off_note=trade_off_note,
+            )
+        )
+
+    return conflict_items
+
+
 def project_retirement_simulation(
     current_age: int,
     base_salary: float,
@@ -182,6 +388,7 @@ def project_retirement_simulation(
     scenario_id: str = "scen_default",
     scenario_type: str = "vehicle_loan",
     assumptions_list: Optional[List[ScenarioAssumption]] = None,
+    user_goals: Optional[List[dict]] = None,
 ) -> ScenarioSimulationResult:
     """
     Executes consistent baseline vs scenario projections using deterministic mathematics
@@ -406,6 +613,29 @@ def project_retirement_simulation(
         total_interest_paid=loan_metrics.total_interest if loan_metrics else 0.0,
     )
 
+    # 7. Multi-goal waterfall conflict analysis
+    if user_goals:
+        goals_for_waterfall = user_goals
+    else:
+        goals_for_waterfall = [
+            {
+                "id": None,
+                "name": "Retirement Target",
+                "target_amount": target_amount,
+                "target_years": target_years,
+                "priority": "Essential",
+                "inflation_rate": inflation_rate,
+            }
+        ]
+
+    goal_impacts = calculate_multi_goal_waterfall(
+        goals=goals_for_waterfall,
+        baseline_surplus=baseline_surplus,
+        modified_surplus=modified_surplus,
+        expected_annual_return=expected_annual_return,
+        loan_tenure_months=loan_tenure_months,
+    )
+
     return ScenarioSimulationResult(
         scenario_id=scenario_id,
         scenario_type=scenario_type,
@@ -418,6 +648,7 @@ def project_retirement_simulation(
         alternatives=alternatives,
         trajectory=trajectory,
         warnings=warnings,
+        goal_impacts=goal_impacts,
     )
 
 

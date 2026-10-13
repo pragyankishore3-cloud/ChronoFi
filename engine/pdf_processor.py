@@ -6,6 +6,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+from engine.metadata_extractor import extract_metadata
 from models.database import Document, DocumentChunk, DocumentStatus
 
 logger = logging.getLogger(__name__)

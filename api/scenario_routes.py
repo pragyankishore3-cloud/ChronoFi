@@ -164,6 +164,18 @@ async def simulate_financial_scenario(
     sim_settings = request.simulation_settings
     horizon = sim_settings.horizon_years or target_years
 
+    user_goals_data = [
+        {
+            "id": g.id,
+            "name": g.name,
+            "target_amount": g.target_amount,
+            "target_years": g.target_years,
+            "priority": g.priority.value if hasattr(g.priority, "value") else str(g.priority),
+            "inflation_rate": g.inflation_rate or 0.06,
+        }
+        for g in user.goals
+    ] if user.goals else None
+
     sim_result = project_retirement_simulation(
         current_age=user.age,
         base_salary=user.base_salary,
@@ -184,6 +196,7 @@ async def simulate_financial_scenario(
         scenario_id=scenario_uuid,
         scenario_type=request.scenario_type,
         assumptions_list=assumptions_list,
+        user_goals=user_goals_data,
     )
 
     result_dict = sim_result.to_dict()

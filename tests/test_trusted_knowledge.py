@@ -1,16 +1,17 @@
-import pytest
-
-pytestmark = pytest.mark.skip(reason="Missing database configuration for Trusted Knowledge chunks")
-from unittest.mock import patch
-
+from unittest.mock import AsyncMock, patch
 import pytest
 
 from engine.vector_store import retrieve_documents, retrieve_trusted_knowledge
-from models.database import DocumentChunk, KnowledgeBaseChunk
+from models.database import Document, DocumentChunk, DocumentStatus, KnowledgeBaseChunk
 
 
 @pytest.fixture
 async def seeded_kb_docs(db_session):
+    # User document parent
+    doc = Document(id=1, user_id=1, filename="user_tax.pdf", status=DocumentStatus.READY)
+    db_session.add(doc)
+    await db_session.commit()
+
     # User document
     user_chunk = DocumentChunk(document_id=1, user_id=1, page_number=1, chunk_index=0, content="User tax forms here", embedding=[0.9, 0.1, 0.0])
     # Global Knowledge chunk
@@ -25,7 +26,9 @@ async def test_trusted_knowledge_retrieval(db_session, seeded_kb_docs):
     """Exit Gate: Trusted knowledge retrieved accurately."""
     mock_query_emb = [0.95, 0.05, 0.0]
     
-    with patch("engine.vector_store.embeddings_model.aembed_query", return_value=mock_query_emb):
+    with patch("engine.vector_store.embeddings_model") as mock_model:
+        mock_model.aembed_query = AsyncMock(return_value=mock_query_emb)
+        mock_model.embed_query.return_value = mock_query_emb
         results = await retrieve_trusted_knowledge("What is Section 80C?", db=db_session)
         
     assert len(results) == 1
@@ -37,7 +40,9 @@ async def test_zero_contamination(db_session, seeded_kb_docs):
     """Exit Gate: Zero contamination of user data into trusted knowledge index."""
     mock_query_emb = [0.9, 0.1, 0.0]
     
-    with patch("engine.vector_store.embeddings_model.aembed_query", return_value=mock_query_emb):
+    with patch("engine.vector_store.embeddings_model") as mock_model:
+        mock_model.aembed_query = AsyncMock(return_value=mock_query_emb)
+        mock_model.embed_query.return_value = mock_query_emb
         # Querying KB should ONLY return KnowledgeBaseChunk, never DocumentChunk
         kb_results = await retrieve_trusted_knowledge("tax", db=db_session)
         
@@ -46,7 +51,6 @@ async def test_zero_contamination(db_session, seeded_kb_docs):
             assert not hasattr(res, "user_id")
             
         # Also ensure user querying doesn't accidentally hit KB
-        # (Though they might want to, the explicit design is to keep spaces separated)
         user_results = await retrieve_documents("tax", user_id=1, db=db_session)
         for res in user_results:
             assert hasattr(res, "user_id")

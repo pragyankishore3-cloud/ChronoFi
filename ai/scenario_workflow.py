@@ -573,6 +573,19 @@ async def interpret_results(state: ScenarioWorkflowState, config: RunnableConfig
         alt_lines = "\n".join(f"- **{a.get('name')}:** {a.get('description', '')}" for a in alternatives)
         alt_text = f"\n\n**Actionable Alternatives to Mitigate Impact:**\n{alt_lines}"
 
+    goal_impacts = res.get("goal_impacts", [])
+    goal_impact_text = ""
+    if goal_impacts and len(goal_impacts) > 1:
+        gi_lines = []
+        for gi in goal_impacts:
+            status_icon = "🟢" if gi.get("modified_status") == "On Track" else ("🟡" if gi.get("modified_status") == "At Risk" else "🔴")
+            gi_lines.append(
+                f"- {status_icon} **{gi.get('name')} ({gi.get('priority')}):** "
+                f"{gi.get('baseline_funding_ratio')}% → {gi.get('modified_funding_ratio')}% funded. "
+                f"{gi.get('trade_off_note')}"
+            )
+        goal_impact_text = f"\n\n**Multi-Goal Life Impact Analysis:**\n" + "\n".join(gi_lines)
+
     narrative = (
         f"Under the assumptions selected ({tenure_yrs}-year tenure), "
         f"the ₹{principal/100000:.1f} Lakh vehicle loan at {rate*100:.1f}% interest requires a monthly EMI of ₹{emi:,.2f}, "
@@ -583,6 +596,7 @@ async def interpret_results(state: ScenarioWorkflowState, config: RunnableConfig
         f"- Equivalent retirement milestone is delayed by **{age_delay:.2f} years** (~{months_delay} months).\n"
         f"- Goal achievement probability shifts from {base_prob:.1f}% to {scen_prob:.1f}%.\n"
         f"- Total loan interest paid over {tenure_yrs} years will be ₹{total_interest:,.2f}."
+        f"{goal_impact_text}"
         f"{alt_text}"
     )
 

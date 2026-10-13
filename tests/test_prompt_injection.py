@@ -1,6 +1,3 @@
-import pytest
-
-pytestmark = pytest.mark.skip(reason="Missing correct injection mock structure")
 from unittest.mock import patch
 
 import pytest
@@ -24,7 +21,7 @@ async def test_retrieve_document_evidence_ignores_malicious_user_id():
     # The config injected by LangGraph securely from the JWT token
     secure_config = {"configurable": {"user_id": 42}}
     
-    with patch("engine.vector_store.retrieve_documents") as mock_retrieve:
+    with patch("ai.supervisor.retrieve_documents") as mock_retrieve:
         mock_retrieve.return_value = []
         
         # Simulate LLM call
@@ -38,8 +35,8 @@ async def test_retrieve_document_evidence_ignores_malicious_user_id():
         mock_retrieve.assert_called_once()
         args, kwargs = mock_retrieve.call_args
         
-        # The signature is retrieve_documents(query, user_id, db, ...)
-        passed_user_id = args[1]
+        # The signature is retrieve_documents(query=..., user_id=..., db=...)
+        passed_user_id = kwargs.get("user_id") if "user_id" in kwargs else (args[1] if len(args) > 1 else None)
         assert passed_user_id == 42
 
 @pytest.mark.asyncio

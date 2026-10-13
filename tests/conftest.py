@@ -42,10 +42,35 @@ async def db_session():
 @pytest.fixture
 async def client(db_session):
     async def override_get_db():
-        yield db_session
+        async with TestingSessionLocal() as session:
+            yield session
 
     app.dependency_overrides[get_db] = override_get_db
     # Using ASGITransport as recommended by httpx 0.28.0+ for FastAPI async testing
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+async def test_user(db_session):
+    from core.security import get_password_hash
+    from models.database import User
+    user = User(
+        name="Test User",
+        email="test@chronofi.demo",
+        hashed_password=get_password_hash("password123"),
+        age=30,
+        risk_tolerance="Moderate",
+        base_salary=100000.0,
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest.fixture
+async def mock_current_user(test_user):
+    return test_user
+
