@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from ai.supervisor import supervisor_app
-from api import auth_routes, deps, scenario_routes, tax_routes
+from api import auth_routes, deps, profile_routes, scenario_routes, tax_routes
 from core import checkpointer
 from models import database, schemas
 from seed.seed_db import seed_database
@@ -42,14 +42,9 @@ app = FastAPI(title="Chronofi Backend API", description="Enterprise Financial Pl
 
 # Mount Routes
 app.include_router(auth_routes.router, prefix="/api/auth", tags=["auth"])
+app.include_router(profile_routes.router, prefix="/api/profile", tags=["profile"])
 app.include_router(tax_routes.router, prefix="/api/tax", tags=["tax"])
 app.include_router(scenario_routes.router, prefix="/api/v1/financial-scenarios", tags=["scenarios"])
-app.include_router(scenario_routes.router, prefix="/api/scenarios", tags=["scenarios"])
-
-
-@app.get("/api/profile/me", response_model=schemas.UserProfileResponse)
-async def get_profile(current_user: database.User = Depends(deps.get_current_user)):
-    return current_user
 
 
 @app.get("/api/v1/threads", response_model=List[schemas.ConversationThreadResponse])

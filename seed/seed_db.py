@@ -23,7 +23,8 @@ async def seed_database():
             hashed_password=dummy_password, 
             age=25, 
             risk_tolerance="Aggressive", 
-            base_salary=80000.0
+            base_salary=80000.0,
+            monthly_expenses=35000.0,
         )
         db.add(arjun)
         await db.commit()
@@ -40,7 +41,8 @@ async def seed_database():
             hashed_password=dummy_password,
             age=35, 
             risk_tolerance="Moderate", 
-            base_salary=250000.0
+            base_salary=250000.0,
+            monthly_expenses=90000.0,
         )
         db.add(priya)
         await db.commit()

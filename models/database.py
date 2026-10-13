@@ -33,6 +33,7 @@ class User(Base):
     age = Column(Integer)
     risk_tolerance = Column(String) 
     base_salary = Column(Float)
+    monthly_expenses = Column(Float, default=0.0)
     
     # lazy="selectin" is crucial for async SQLAlchemy to avoid lazy-load blocking
     assets = relationship("Asset", back_populates="user", cascade="all, delete-orphan", lazy="selectin")

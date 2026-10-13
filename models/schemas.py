@@ -42,18 +42,38 @@ class GoalResponse(GoalBase):
     class Config:
         from_attributes = True
 
+class AssetCreate(AssetBase):
+    pass
+
+class LiabilityCreate(LiabilityBase):
+    pass
+
+class GoalCreate(GoalBase):
+    pass
+
 class UserBase(BaseModel):
     name: str
     email: str
     age: int
     risk_tolerance: str
     base_salary: float
+    monthly_expenses: float = 0.0
+
+class UserProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    age: Optional[int] = None
+    risk_tolerance: Optional[str] = None
+    base_salary: Optional[float] = None
+    monthly_expenses: Optional[float] = None
 
 class UserProfileResponse(UserBase):
     id: int
     assets: list[AssetResponse] = []
     liabilities: list[LiabilityResponse] = []
     goals: list[GoalResponse] = []
+    net_worth: float = 0.0
+    monthly_investable_surplus: float = 0.0
+    months_of_runway: float = 0.0
     
     class Config:
         from_attributes = True
