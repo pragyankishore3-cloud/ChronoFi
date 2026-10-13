@@ -1,5 +1,7 @@
-from engine.monte_carlo import run_monte_carlo_sip
 import time
+
+from engine.monte_carlo import run_monte_carlo_sip
+
 
 def test_monte_carlo():
     print("Testing Monte Carlo Simulation (10,000 paths)...")

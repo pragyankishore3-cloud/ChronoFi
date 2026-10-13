@@ -1,11 +1,12 @@
 import pytest
+
 pytestmark = pytest.mark.skip(reason="Missing correct injection mock structure")
-import pytest
-import os
 from unittest.mock import patch
-from langchain_core.messages import HumanMessage
+
+import pytest
 
 from ai.supervisor import retrieve_document_evidence
+
 
 @pytest.mark.asyncio
 async def test_retrieve_document_evidence_ignores_malicious_user_id():

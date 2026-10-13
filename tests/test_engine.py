@@ -1,5 +1,6 @@
 from engine.advanced_monte_carlo import run_advanced_monte_carlo
 
+
 def test_advanced_monte_carlo_math():
     """
     Tests the quantitative math engine to ensure it returns correctly structured

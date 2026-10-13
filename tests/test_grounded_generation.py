@@ -1,9 +1,10 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-import os
-from unittest.mock import patch, AsyncMock, MagicMock
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from ai.supervisor import document_agent, document_agent_prompt
+
 
 @pytest.mark.asyncio
 async def test_document_agent_prompt_contains_critical_rules():

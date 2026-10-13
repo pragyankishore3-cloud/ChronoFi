@@ -1,5 +1,7 @@
 from langchain_core.tools import tool
+
 from engine.tax_calc import calculate_new_regime_tax, calculate_old_regime_tax
+
 
 @tool
 def calculate_tax_liability(salary: float, agricultural_income: float = 0.0, deductions: float = 0.0) -> dict:

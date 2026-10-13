@@ -1,5 +1,6 @@
 import numpy_financial as npf
 
+
 def calculate_future_value(current_value: float, annual_return_rate: float, years: int) -> float:
     """
     Project current assets forward based on expected returns.

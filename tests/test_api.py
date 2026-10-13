@@ -1,6 +1,8 @@
 import pytest
+
 from core.security import get_password_hash
 from models.database import User
+
 
 @pytest.fixture
 async def test_user(db_session):

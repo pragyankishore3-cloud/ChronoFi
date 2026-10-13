@@ -1,8 +1,9 @@
 import pytest
+
 pytestmark = pytest.mark.skip(reason="Missing endpoint /api/documents/upload")
-import pytest
-import os
 import asyncio
+
+import pytest
 from httpx import AsyncClient
 
 # Test data sizes
@@ -45,7 +46,8 @@ async def another_user_client(client, db_session):
     token = login_res.json()["access_token"]
     
     # We need a separate client instance to not pollute the main one
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport
+
     from main import app
     ac = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
     ac.headers.update({"Authorization": f"Bearer {token}"})

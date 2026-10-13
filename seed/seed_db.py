@@ -1,8 +1,8 @@
 import asyncio
-from models.database import AsyncSessionLocal, User, Asset, Liability, Goal
-from sqlalchemy.future import select
 
 from core.security import get_password_hash
+from models.database import Asset, AsyncSessionLocal, Goal, Liability, User
+
 
 async def seed_database():
     async with AsyncSessionLocal() as db:

@@ -1,15 +1,16 @@
-import json
-import asyncio
 import contextlib
-from fastapi import FastAPI, Depends, HTTPException
+import json
+
+from fastapi import Depends, FastAPI
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from models import database, schemas
-from api import auth_routes, deps, tax_routes
 from ai.supervisor import supervisor_app
+from api import auth_routes, deps, tax_routes, scenario_routes
+from models import database, schemas
 from seed.seed_db import seed_database
+
 
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -26,10 +27,21 @@ app = FastAPI(title="Chronofi Backend API", description="Enterprise Financial Pl
 # Mount Routes
 app.include_router(auth_routes.router, prefix="/api/auth", tags=["auth"])
 app.include_router(tax_routes.router, prefix="/api/tax", tags=["tax"])
+app.include_router(scenario_routes.router, prefix="/api/v1/financial-scenarios", tags=["scenarios"])
+app.include_router(scenario_routes.router, prefix="/api/scenarios", tags=["scenarios"])
 
 @app.get("/api/profile/me", response_model=schemas.UserProfileResponse)
 async def get_profile(current_user: database.User = Depends(deps.get_current_user)):
     return current_user
+
+@app.get("/api/chat")
+async def chat_with_chronofi_get(
+    message: str,
+    current_user: database.User = Depends(deps.get_current_user),
+    db: AsyncSession = Depends(deps.get_db)
+):
+    request = schemas.ChatRequest(user_id=current_user.id, message=message)
+    return await chat_with_chronofi(request, current_user, db)
 
 @app.post("/api/chat")
 async def chat_with_chronofi(
@@ -58,6 +70,7 @@ async def chat_with_chronofi(
     config = {'configurable': {'user_id': current_user.id}}
 
     async def event_stream():
+        streamed_tokens = False
         try:
             # astream_events is the modern LangGraph streaming method
             async for event in agent.astream_events(
@@ -70,13 +83,32 @@ async def chat_with_chronofi(
                 if kind == "on_chat_model_stream":
                     content = event["data"]["chunk"].content
                     if content:
+                        streamed_tokens = True
                         # Server-Sent Event (SSE) format
                         yield f"data: {json.dumps({'type': 'token', 'content': content})}\n\n"
                         
-                # Optionally stream tool execution logs to the frontend
+                # Stream tool execution logs to the frontend
                 elif kind == "on_tool_start":
-                    tool_name = event["name"]
+                    tool_name = event.get("name")
                     yield f"data: {json.dumps({'type': 'log', 'content': f'Invoking mathematical tool: {tool_name}'})}\n\n"
+
+                # Stream structured scenario result when financial engine finishes
+                elif kind == "on_tool_end":
+                    tool_name = event.get("name")
+                    tool_output = event.get("data", {}).get("output")
+                    if tool_name == "run_financial_scenario" and isinstance(tool_output, dict):
+                        yield f"data: {json.dumps({'type': 'scenario_result', 'data': tool_output})}\n\n"
+
+                # Stream final output if generated deterministically by presentation node
+                elif kind == "on_chain_end" and not streamed_tokens:
+                    chain_name = event.get("name")
+                    if chain_name in ["Scenario_Agent", "present_scenario"]:
+                        out = event.get("data", {}).get("output", {})
+                        if isinstance(out, dict) and "messages" in out and out["messages"]:
+                            content = out["messages"][-1].content
+                            if content:
+                                yield f"data: {json.dumps({'type': 'token', 'content': content})}\n\n"
+                                streamed_tokens = True
                     
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"

@@ -1,11 +1,13 @@
 import pytest
-pytestmark = pytest.mark.skip(reason="langchain_google_genai GoogleGenerativeAIEmbeddings does not have aembed_query in the installed version")
-import pytest
-import os
-from unittest.mock import patch, MagicMock
 
-from models.database import DocumentChunk
+pytestmark = pytest.mark.skip(reason="langchain_google_genai GoogleGenerativeAIEmbeddings does not have aembed_query in the installed version")
+from unittest.mock import patch
+
+import pytest
+
 from engine.vector_store import embed_chunks, retrieve_documents
+from models.database import DocumentChunk
+
 
 @pytest.mark.asyncio
 async def test_embed_chunks(db_session):

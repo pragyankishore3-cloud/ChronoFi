@@ -1,11 +1,13 @@
 import pytest
+
 pytestmark = pytest.mark.skip(reason="Missing implementation for RAG workflow steps")
+from unittest.mock import patch
+
 import pytest
-import os
-from unittest.mock import patch, MagicMock
 from langchain_core.messages import HumanMessage
 
-from ai.supervisor import supervisor_node, AgentState
+from ai.supervisor import supervisor_node
+
 
 @pytest.fixture
 def base_state():

@@ -1,10 +1,13 @@
 import pytest
+
 pytestmark = pytest.mark.skip(reason="Missing database configuration for Trusted Knowledge chunks")
-import pytest
 from unittest.mock import patch
 
+import pytest
+
+from engine.vector_store import retrieve_documents, retrieve_trusted_knowledge
 from models.database import DocumentChunk, KnowledgeBaseChunk
-from engine.vector_store import retrieve_trusted_knowledge, retrieve_documents
+
 
 @pytest.fixture
 async def seeded_kb_docs(db_session):
