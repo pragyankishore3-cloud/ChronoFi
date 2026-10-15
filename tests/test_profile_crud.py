@@ -164,3 +164,101 @@ async def test_liability_and_goal_crud(client, user_profile_setup):
     assert del_liab.status_code == 200
     del_goal = await client.delete(f"/api/profile/goals/{goal_id}", headers=headers)
     assert del_goal.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_profile_contract_validation_and_currency(client, user_profile_setup):
+    """Verifies logical data contract compliance: currency defaults and non-negative constraints."""
+    user_a = user_profile_setup["user_a"]
+    token = create_access_token(data={"sub": str(user_a.id)})
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Profile query contains ISO currency
+    res = await client.get("/api/profile/me", headers=headers)
+    assert res.status_code == 200
+    profile_data = res.json()
+    assert profile_data["currency"] == "INR"
+    assert profile_data["assets"][0]["currency"] == "INR"
+    assert profile_data["liabilities"][0]["currency"] == "INR"
+    assert profile_data["goals"][0]["currency"] == "INR"
+
+    # Reject negative asset value
+    bad_asset = {
+        "name": "Negative Asset",
+        "asset_type": "Equity",
+        "current_value": -500.0,
+        "expected_return_rate": 0.08,
+    }
+    res_bad_asset = await client.post("/api/profile/assets", json=bad_asset, headers=headers)
+    assert res_bad_asset.status_code == 422
+
+    # Reject negative liability principal
+    bad_liab = {
+        "name": "Negative Debt",
+        "principal_remaining": -1000.0,
+        "interest_rate": 0.1,
+        "monthly_payment": 500.0,
+    }
+    res_bad_liab = await client.post("/api/profile/liabilities", json=bad_liab, headers=headers)
+    assert res_bad_liab.status_code == 422
+
+    # Reject invalid target_years (< 1)
+    bad_goal = {
+        "name": "Zero Year Goal",
+        "target_amount": 100000.0,
+        "target_years": 0,
+        "priority": "Essential",
+    }
+    res_bad_goal = await client.post("/api/profile/goals", json=bad_goal, headers=headers)
+    assert res_bad_goal.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_update_financial_records_and_isolation(client, user_profile_setup):
+    """Verifies that authenticated users can edit their own assets, liabilities, and goals, with strict isolation."""
+    user_a = user_profile_setup["user_a"]
+    user_b = user_profile_setup["user_b"]
+    token_a = create_access_token(data={"sub": str(user_a.id)})
+    token_b = create_access_token(data={"sub": str(user_b.id)})
+    headers_a = {"Authorization": f"Bearer {token_a}"}
+    headers_b = {"Authorization": f"Bearer {token_b}"}
+
+    asset_a = user_profile_setup["asset_a"]
+    liab_a = user_profile_setup["liab_a"]
+    goal_a = user_profile_setup["goal_a"]
+
+    # 1. User A updates their asset
+    update_asset_payload = {"name": "Updated Emergency Reserve", "current_value": 350000.0}
+    res_asset = await client.put(f"/api/profile/assets/{asset_a.id}", json=update_asset_payload, headers=headers_a)
+    assert res_asset.status_code == 200
+    assert res_asset.json()["name"] == "Updated Emergency Reserve"
+    assert res_asset.json()["current_value"] == 350000.0
+
+    # User B cannot update User A's asset
+    res_asset_b = await client.put(f"/api/profile/assets/{asset_a.id}", json=update_asset_payload, headers=headers_b)
+    assert res_asset_b.status_code == 404
+
+    # 2. User A updates their liability
+    update_liab_payload = {"principal_remaining": 85000.0, "monthly_payment": 9000.0}
+    res_liab = await client.put(f"/api/profile/liabilities/{liab_a.id}", json=update_liab_payload, headers=headers_a)
+    assert res_liab.status_code == 200
+    assert res_liab.json()["principal_remaining"] == 85000.0
+    assert res_liab.json()["monthly_payment"] == 9000.0
+
+    # User B cannot update User A's liability
+    res_liab_b = await client.put(f"/api/profile/liabilities/{liab_a.id}", json=update_liab_payload, headers=headers_b)
+    assert res_liab_b.status_code == 404
+
+    # 3. User A updates their goal
+    update_goal_payload = {"target_amount": 250000.0, "priority": "Essential", "target_years": 2}
+    res_goal = await client.put(f"/api/profile/goals/{goal_a.id}", json=update_goal_payload, headers=headers_a)
+    assert res_goal.status_code == 200
+    assert res_goal.json()["target_amount"] == 250000.0
+    assert res_goal.json()["priority"] == "Essential"
+    assert res_goal.json()["target_years"] == 2
+
+    # User B cannot update User A's goal
+    res_goal_b = await client.put(f"/api/profile/goals/{goal_a.id}", json=update_goal_payload, headers=headers_b)
+    assert res_goal_b.status_code == 404
+
+

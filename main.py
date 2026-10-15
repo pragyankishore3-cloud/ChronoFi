@@ -18,6 +18,7 @@ from api import (
     document_routes,
     health_routes,
     profile_routes,
+    rates_routes,
     scenario_routes,
     stress_routes,
     tax_routes,
@@ -73,6 +74,7 @@ app.include_router(stress_routes.router, prefix="/api/stress", tags=["stress"])
 app.include_router(debt_routes.router, prefix="/api/debt", tags=["debt"])
 app.include_router(health_routes.router, prefix="/api/health", tags=["health"])
 app.include_router(document_routes.router, prefix="/api/documents", tags=["documents"])
+app.include_router(rates_routes.router, prefix="/api/rates", tags=["rates"])
 app.include_router(scenario_routes.router, prefix="/api/v1/financial-scenarios", tags=["scenarios"])
 
 

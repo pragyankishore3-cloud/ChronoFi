@@ -106,17 +106,17 @@ async def simulate_financial_scenario(
     changes = request.changes
     if changes.loan_principal < 0:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="loan_principal cannot be negative.",
         )
     if changes.annual_interest_rate < 0 or changes.annual_interest_rate > 1.0:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="annual_interest_rate must be between 0.0 and 1.0 (e.g. 0.09 for 9%).",
         )
     if changes.loan_tenure_months <= 0 or changes.loan_tenure_months > 360:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="loan_tenure_months must be between 1 and 360.",
         )
 

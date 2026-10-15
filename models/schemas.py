@@ -1,6 +1,7 @@
 from enum import Enum
+from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PriorityLevel(str, Enum):
@@ -11,60 +12,88 @@ class PriorityLevel(str, Enum):
 class AssetBase(BaseModel):
     name: str
     asset_type: str
-    current_value: float
+    current_value: float = Field(..., ge=0.0)
     expected_return_rate: float
+    currency: str = Field(default="INR")
 
 class AssetResponse(AssetBase):
     id: int
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class LiabilityBase(BaseModel):
     name: str
-    principal_remaining: float
-    interest_rate: float
-    monthly_payment: float
+    principal_remaining: float = Field(..., ge=0.0)
+    interest_rate: float = Field(..., ge=0.0)
+    monthly_payment: float = Field(..., ge=0.0)
+    currency: str = Field(default="INR")
 
 class LiabilityResponse(LiabilityBase):
     id: int
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class GoalBase(BaseModel):
     name: str
-    target_amount: float
-    target_years: int
+    target_amount: float = Field(..., ge=0.0)
+    target_years: int = Field(..., ge=1)
     priority: PriorityLevel
     inflation_rate: float = 0.06
+    currency: str = Field(default="INR")
 
 class GoalResponse(GoalBase):
     id: int
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class AssetCreate(AssetBase):
     pass
 
+class AssetUpdate(BaseModel):
+    name: Optional[str] = None
+    asset_type: Optional[str] = None
+    current_value: Optional[float] = Field(None, ge=0.0)
+    expected_return_rate: Optional[float] = None
+    currency: Optional[str] = None
+
 class LiabilityCreate(LiabilityBase):
     pass
+
+class LiabilityUpdate(BaseModel):
+    name: Optional[str] = None
+    principal_remaining: Optional[float] = Field(None, ge=0.0)
+    interest_rate: Optional[float] = Field(None, ge=0.0)
+    monthly_payment: Optional[float] = Field(None, ge=0.0)
+    currency: Optional[str] = None
 
 class GoalCreate(GoalBase):
     pass
 
+class GoalUpdate(BaseModel):
+    name: Optional[str] = None
+    target_amount: Optional[float] = Field(None, ge=0.0)
+    target_years: Optional[int] = Field(None, ge=1)
+    priority: Optional[PriorityLevel] = None
+    inflation_rate: Optional[float] = None
+    currency: Optional[str] = None
+
 class UserBase(BaseModel):
     name: str
     email: str
-    age: int
+    age: int = Field(..., ge=0)
     risk_tolerance: str
-    base_salary: float
-    monthly_expenses: float = 0.0
+    base_salary: float = Field(..., ge=0.0)
+    monthly_expenses: float = Field(default=0.0, ge=0.0)
+    currency: str = Field(default="INR")
+    occupation: Optional[str] = None
+    date_of_birth: Optional[str] = None
 
 class UserProfileUpdate(BaseModel):
     name: Optional[str] = None
-    age: Optional[int] = None
+    age: Optional[int] = Field(None, ge=0)
     risk_tolerance: Optional[str] = None
-    base_salary: Optional[float] = None
-    monthly_expenses: Optional[float] = None
+    base_salary: Optional[float] = Field(None, ge=0.0)
+    monthly_expenses: Optional[float] = Field(None, ge=0.0)
+    currency: Optional[str] = None
+    occupation: Optional[str] = None
+    date_of_birth: Optional[str] = None
 
 class UserProfileResponse(UserBase):
     id: int
@@ -74,9 +103,9 @@ class UserProfileResponse(UserBase):
     net_worth: float = 0.0
     monthly_investable_surplus: float = 0.0
     months_of_runway: float = 0.0
+    created_at: Optional[str] = "2026-01-01T00:00:00Z"
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class ChatRequest(BaseModel):
     user_id: int
@@ -95,8 +124,7 @@ class ConversationThreadResponse(BaseModel):
     created_at: str
     updated_at: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class HistoricalScenarioResponse(BaseModel):
     scenario_id: str
@@ -135,8 +163,6 @@ class ConfirmLiabilityResponse(BaseModel):
     message: str
 
 # --- WHAT-IF SCENARIO SCHEMAS ---
-
-from typing import Any, Optional
 
 class ScenarioChanges(BaseModel):
     loan_principal: float = 0.0
