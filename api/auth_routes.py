@@ -34,8 +34,7 @@ async def login_for_access_token(
     # 3. Mitigate timing attacks by separating the checks and using a dummy verification
     if not user:
         # Run a dummy verification against a static hash to equalize response times
-        # Note: Replace this string with a valid hash format for your chosen algorithm (e.g., bcrypt)
-        verify_password(form_data.password, "$2b$12$DummyBcryptHashStringThatTakesTime...") 
+        verify_password(form_data.password, "$2b$12$rsuUyzdMcSNI.8oBXDdep.tYPoBI2XmE68nbJm/Xf/zZkGBL0DKje") 
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",

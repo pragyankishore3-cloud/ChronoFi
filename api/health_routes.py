@@ -72,7 +72,11 @@ async def get_user_financial_health(
     monthly_expenses = current_user.monthly_expenses or 0.0
 
     goal_dicts = [
-        {"target_amount": g.target_amount, "current_amount": g.current_amount, "title": g.title}
+        {
+            "target_amount": getattr(g, "target_amount", 0.0),
+            "current_amount": getattr(g, "current_amount", 0.0),
+            "title": getattr(g, "name", getattr(g, "title", "Goal")),
+        }
         for g in goals
     ]
 

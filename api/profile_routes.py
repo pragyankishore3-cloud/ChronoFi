@@ -9,6 +9,11 @@ from models import database, schemas
 
 router = APIRouter()
 
+# In-memory preference store to preserve user currency choice, occupation, and DOB without altering existing DB schemas
+_user_currency_preferences: dict[int, str] = {}
+_user_occupations: dict[int, str] = {}
+_user_dobs: dict[int, str] = {}
+
 
 def _compute_profile_kpis(user: database.User) -> dict[str, float]:
     total_assets = sum(a.current_value for a in user.assets) if user.assets else 0.0
@@ -63,6 +68,9 @@ async def get_my_profile(
         risk_tolerance=user.risk_tolerance,
         base_salary=user.base_salary,
         monthly_expenses=user.monthly_expenses or 0.0,
+        currency=_user_currency_preferences.get(user.id, "INR"),
+        occupation=_user_occupations.get(user.id, "Professional / Tech"),
+        date_of_birth=_user_dobs.get(user.id, "2001-01-15"),
         assets=[schemas.AssetResponse.model_validate(a) for a in user.assets],
         liabilities=[schemas.LiabilityResponse.model_validate(l) for l in user.liabilities],
         goals=[schemas.GoalResponse.model_validate(g) for g in user.goals],
@@ -102,6 +110,12 @@ async def update_my_profile(
         user.base_salary = update_data.base_salary
     if update_data.monthly_expenses is not None:
         user.monthly_expenses = update_data.monthly_expenses
+    if update_data.currency is not None:
+        _user_currency_preferences[user.id] = update_data.currency.upper().strip()
+    if update_data.occupation is not None:
+        _user_occupations[user.id] = update_data.occupation.strip()
+    if update_data.date_of_birth is not None:
+        _user_dobs[user.id] = update_data.date_of_birth.strip()
 
     await db.commit()
     await db.refresh(user)
@@ -116,6 +130,9 @@ async def update_my_profile(
         risk_tolerance=user.risk_tolerance,
         base_salary=user.base_salary,
         monthly_expenses=user.monthly_expenses or 0.0,
+        currency=_user_currency_preferences.get(user.id, "INR"),
+        occupation=_user_occupations.get(user.id, "Professional / Tech"),
+        date_of_birth=_user_dobs.get(user.id, "2001-01-15"),
         assets=[schemas.AssetResponse.model_validate(a) for a in user.assets],
         liabilities=[schemas.LiabilityResponse.model_validate(l) for l in user.liabilities],
         goals=[schemas.GoalResponse.model_validate(g) for g in user.goals],
@@ -123,6 +140,7 @@ async def update_my_profile(
         monthly_investable_surplus=kpis["monthly_investable_surplus"],
         months_of_runway=kpis["months_of_runway"],
     )
+
 
 
 # --- ASSET CRUD ---
@@ -144,6 +162,38 @@ async def create_asset(
     await db.commit()
     await db.refresh(new_asset)
     return new_asset
+
+
+@router.put("/assets/{asset_id}", response_model=schemas.AssetResponse)
+async def update_asset(
+    asset_id: int,
+    asset_in: schemas.AssetUpdate,
+    current_user: database.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Updates an existing asset belonging to the authenticated user."""
+    res = await db.execute(
+        select(database.Asset).where(
+            database.Asset.id == asset_id,
+            database.Asset.user_id == current_user.id
+        )
+    )
+    asset = res.scalars().first()
+    if not asset:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found.")
+
+    if asset_in.name is not None:
+        asset.name = asset_in.name
+    if asset_in.asset_type is not None:
+        asset.asset_type = asset_in.asset_type
+    if asset_in.current_value is not None:
+        asset.current_value = asset_in.current_value
+    if asset_in.expected_return_rate is not None:
+        asset.expected_return_rate = asset_in.expected_return_rate
+
+    await db.commit()
+    await db.refresh(asset)
+    return asset
 
 
 @router.delete("/assets/{asset_id}")
@@ -188,6 +238,38 @@ async def create_liability(
     return new_liab
 
 
+@router.put("/liabilities/{liability_id}", response_model=schemas.LiabilityResponse)
+async def update_liability(
+    liability_id: int,
+    liability_in: schemas.LiabilityUpdate,
+    current_user: database.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Updates an existing liability belonging to the authenticated user."""
+    res = await db.execute(
+        select(database.Liability).where(
+            database.Liability.id == liability_id,
+            database.Liability.user_id == current_user.id
+        )
+    )
+    liab = res.scalars().first()
+    if not liab:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Liability not found.")
+
+    if liability_in.name is not None:
+        liab.name = liability_in.name
+    if liability_in.principal_remaining is not None:
+        liab.principal_remaining = liability_in.principal_remaining
+    if liability_in.interest_rate is not None:
+        liab.interest_rate = liability_in.interest_rate
+    if liability_in.monthly_payment is not None:
+        liab.monthly_payment = liability_in.monthly_payment
+
+    await db.commit()
+    await db.refresh(liab)
+    return liab
+
+
 @router.delete("/liabilities/{liability_id}")
 async def delete_liability(
     liability_id: int,
@@ -229,6 +311,40 @@ async def create_goal(
     await db.commit()
     await db.refresh(new_goal)
     return new_goal
+
+
+@router.put("/goals/{goal_id}", response_model=schemas.GoalResponse)
+async def update_goal(
+    goal_id: int,
+    goal_in: schemas.GoalUpdate,
+    current_user: database.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Updates an existing life goal belonging to the authenticated user."""
+    res = await db.execute(
+        select(database.Goal).where(
+            database.Goal.id == goal_id,
+            database.Goal.user_id == current_user.id
+        )
+    )
+    goal = res.scalars().first()
+    if not goal:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Goal not found.")
+
+    if goal_in.name is not None:
+        goal.name = goal_in.name
+    if goal_in.target_amount is not None:
+        goal.target_amount = goal_in.target_amount
+    if goal_in.target_years is not None:
+        goal.target_years = goal_in.target_years
+    if goal_in.priority is not None:
+        goal.priority = goal_in.priority
+    if goal_in.inflation_rate is not None:
+        goal.inflation_rate = goal_in.inflation_rate
+
+    await db.commit()
+    await db.refresh(goal)
+    return goal
 
 
 @router.delete("/goals/{goal_id}")
