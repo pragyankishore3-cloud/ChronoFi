@@ -1,10 +1,15 @@
 import contextlib
 from datetime import datetime, timezone
 import json
+from pathlib import Path
+import sys
 from typing import List, Optional
 import uuid
 
-from pathlib import Path
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
