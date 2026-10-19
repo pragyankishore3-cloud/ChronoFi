@@ -1,4 +1,6 @@
 
+import os
+
 from langchain.tools import tool
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.prebuilt import create_react_agent
@@ -53,6 +55,7 @@ CRITICAL RULES:
 """
 
 def get_financial_agent():
-    llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0.2)
+    model_name = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+    llm = ChatGoogleGenerativeAI(model=model_name, temperature=0.2)
     agent = create_react_agent(llm, tools, prompt=system_message)
     return agent

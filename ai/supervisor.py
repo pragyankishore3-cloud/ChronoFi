@@ -113,7 +113,8 @@ async def retrieve_document_evidence(query: str, config: RunnableConfig, documen
 
 # --- AGENTS ---
 # Using temperature=0.1 for more deterministic orchestration
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-pro", temperature=0.1)
+model_name = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+llm = ChatGoogleGenerativeAI(model=model_name, temperature=0.1)
 
 tax_agent = create_react_agent(
     llm, 
